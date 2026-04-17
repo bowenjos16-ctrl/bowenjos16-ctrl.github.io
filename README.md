@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Corte Piedra · Menú Digital
 
-## Getting Started
+Sitio web de menú digital para el restaurante **Corte Piedra** (Piñas, El Oro — Ecuador). Carta interactiva con integración WhatsApp, sistema de calificaciones a Google Sheets, minijuegos, eventos en vivo y más.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 16** (App Router, Turbopack)
+- **React 19** + TypeScript
+- **Tailwind CSS 4**
+- **Framer Motion** para animaciones
+- **Lucide Icons**
+- **Playfair Display** + **Inter** (Google Fonts)
+
+## Funcionalidades
+
+### Carta
+- 7 categorías (Entradas, Cortes, Grill & Lomo Fino, Alitas/Burgers/Pizza, Mariscos, Bebidas, Bar)
+- Navegación por tabs + sub-nav de categorías
+- Badges: Más vendido, Signature, Ideal compartir, Premium, etc.
+- Sugerencias de combos (upselling)
+- Buscador con atajo `⌘K`
+
+### Integración WhatsApp
+- Botón "Pedir" en cada producto con mensaje pre-escrito
+- Número configurable en `lib/config.ts`
+
+### Conversión y marketing
+- Splash de bienvenida con **Top 3 recomendados**
+- **Promo del día** con countdown en vivo
+- **Happy hour** automático por horario
+- **Ruleta de descuentos** (8 premios, 1 tirada por sesión)
+- Incentivo por seguir Instagram
+
+### Zona de diversión
+- Trivia Corte Piedra
+- Memorama de platos
+- Rasca y gana
+
+### Experiencia
+- Hero con video YouTube + fallback Ken Burns
+- **Audio del menú** con Web Speech API
+- **Mensaje del chef**
+- **Eventos en vivo** con detección de día actual
+- Galería con lightbox
+
+### Calificaciones
+- 5 estrellas + comentario
+- POST a **Google Apps Script** (ver `docs/GOOGLE-SHEETS-SETUP.md`)
+- Emails automáticos al dueño
+- Redirige a Google Reviews si es ≥4 estrellas
+
+## Configuración
+
+Edita `lib/config.ts`:
+
+```ts
+export const CONFIG = {
+  whatsapp: "593968429494",
+  instagram: "cortepiedra",
+  heroVideoId: "",        // YouTube ID para el hero
+  ratingEndpoint: "",     // URL del Apps Script Web App
+  // ...
+};
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Para el menú, edita `lib/menu-data.ts`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Desarrollo
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev       # http://localhost:3000
+npm run build
+npm run start
+```
 
-## Learn More
+## Branding
 
-To learn more about Next.js, take a look at the following resources:
+- **Paleta**: negro puro (#000) + blanco (#fff) + rojo (#c8202e)
+- **Isotipo**: la llama icónica del logo, animada con flicker
+- **Tipografía**: Playfair Display (serif) + Inter (sans)
+- **Tagline**: *"Experiencia Gourmet en Cada Bocado"*
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Backend de ratings
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Sigue `docs/GOOGLE-SHEETS-SETUP.md` para conectar el sistema de calificaciones a una hoja de Google con emails automáticos.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Hecho para Corte Piedra · Parrilla & Mariscos · Piñas, El Oro, Ecuador.
