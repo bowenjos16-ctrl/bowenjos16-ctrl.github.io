@@ -75,9 +75,9 @@ export default function SectionTabs() {
   };
 
   return (
-    <section className="relative py-12">
+    <section className="relative py-8 sm:py-12">
       {/* Tab bar */}
-      <div className="sticky top-0 z-30 -mx-6 mb-8 border-y border-[var(--red)]/15 bg-[var(--background)]/80 px-6 py-4 backdrop-blur-xl">
+      <div className="sticky top-0 z-30 mb-6 border-y border-[var(--red)]/15 bg-black/85 px-3 py-3 backdrop-blur-xl sm:mb-8 sm:px-6 sm:py-4">
         <div className="mx-auto max-w-6xl">
           <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:justify-center sm:overflow-visible">
             {TABS.map((t) => {
@@ -87,10 +87,10 @@ export default function SectionTabs() {
                 <button
                   key={t.id}
                   onClick={() => go(t.id)}
-                  className={`group relative flex flex-shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold tracking-wider uppercase transition-all ${
+                  className={`group relative flex flex-shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold tracking-wider uppercase transition-all sm:gap-2 sm:px-5 sm:py-2.5 sm:text-sm ${
                     isActive
-                      ? "text-[var(--background)]"
-                      : "border border-[var(--red)]/20 bg-[var(--charcoal)]/60 text-[var(--foreground)]/70 hover:border-[var(--red)]/50 hover:text-[white]"
+                      ? "text-black"
+                      : "border border-[var(--red)]/20 bg-[var(--charcoal)]/60 text-white/70 active:text-white hover:border-[var(--red)]/50 hover:text-white"
                   }`}
                   style={{
                     boxShadow: isActive
@@ -101,7 +101,7 @@ export default function SectionTabs() {
                   {isActive && (
                     <motion.span
                       layoutId="tab-bg"
-                      className="absolute inset-0 rounded-full bg-gradient-to-br from-[white] to-[var(--red)]"
+                      className="absolute inset-0 rounded-full bg-gradient-to-br from-white to-[var(--red)]"
                       transition={{
                         type: "spring",
                         stiffness: 380,
@@ -109,7 +109,7 @@ export default function SectionTabs() {
                       }}
                     />
                   )}
-                  <Icon className="relative z-10 h-4 w-4" />
+                  <Icon className="relative z-10 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   <span className="relative z-10">{t.label}</span>
                 </button>
               );
@@ -120,7 +120,7 @@ export default function SectionTabs() {
 
       {/* Sub-nav para Menú */}
       {active === "menu" && (
-        <div className="mx-auto mb-10 flex max-w-6xl flex-wrap justify-center gap-2 px-6">
+        <div className="mx-auto mb-8 flex max-w-6xl gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mb-10 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-6">
           {menu.map((c) => {
             const isActive = menuSub === c.id;
             return (
@@ -130,10 +130,10 @@ export default function SectionTabs() {
                   setMenuSub(c.id);
                   history.replaceState(null, "", `#${c.id}`);
                 }}
-                className={`rounded-full border px-4 py-1.5 text-xs tracking-wider uppercase transition-all ${
+                className={`flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] tracking-wider uppercase transition-all sm:px-4 sm:text-xs ${
                   isActive
-                    ? "border-[var(--red)] bg-[var(--red)]/15 text-[white]"
-                    : "border-[var(--red)]/15 text-[var(--foreground)]/50 hover:border-[var(--red)]/40 hover:text-[white]"
+                    ? "border-[var(--red)] bg-[var(--red)]/15 text-white"
+                    : "border-[var(--red)]/15 text-white/50 hover:border-[var(--red)]/40 hover:text-white"
                 }`}
               >
                 {c.title}
