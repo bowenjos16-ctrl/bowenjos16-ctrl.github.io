@@ -22,7 +22,12 @@ import RatingSystem from "@/components/RatingSystem";
 import GameZone from "@/components/GameZone";
 import SocialIncentive from "@/components/SocialIncentive";
 import PromoBanner from "@/components/PromoBanner";
-import { menu } from "@/lib/menu-data";
+import MenuSwitcher from "@/components/MenuSwitcher";
+import {
+  MENU_SCHEDULE,
+  getMenuKindByHour,
+  type MenuKind,
+} from "@/lib/menu-schedule";
 
 type Tab = {
   id: string;
@@ -43,7 +48,34 @@ const TABS: Tab[] = [
 
 export default function SectionTabs() {
   const [active, setActive] = useState("menu");
-  const [menuSub, setMenuSub] = useState(menu[0].id);
+  // Qué menú es el "activo por horario"
+  const [currentKind, setCurrentKind] = useState<MenuKind>("regular");
+  // Qué menú está viendo el usuario (puede diferir del activo)
+  const [menuKind, setMenuKind] = useState<MenuKind>("regular");
+  const activeMenuData = MENU_SCHEDULE[menuKind].data;
+  const [menuSub, setMenuSub] = useState(activeMenuData[0].id);
+
+  // Detectar menú activo por hora + auto-refresh cada minuto
+  useEffect(() => {
+    const sync = () => {
+      const kind = getMenuKindByHour(new Date().getHours());
+      setCurrentKind(kind);
+      // Si es la primera carga, poner al usuario en el menú activo
+      setMenuKind((prev) => (prev === kind ? prev : kind));
+    };
+    sync();
+    const id = setInterval(sync, 60_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cuando cambia el menú seleccionado, resetear sub-categoría a la primera
+  useEffect(() => {
+    const first = MENU_SCHEDULE[menuKind].data[0].id;
+    setMenuSub((prev) =>
+      MENU_SCHEDULE[menuKind].data.some((c) => c.id === prev) ? prev : first,
+    );
+  }, [menuKind]);
 
   // Read hash on mount + listen for changes
   useEffect(() => {
@@ -54,7 +86,11 @@ export default function SectionTabs() {
         setActive(hash);
         return;
       }
-      if (menu.some((c) => c.id === hash)) {
+      const allCats = [
+        ...MENU_SCHEDULE.regular.data,
+        ...MENU_SCHEDULE.tradicional.data,
+      ];
+      if (allCats.some((c) => c.id === hash)) {
         setActive("menu");
         setMenuSub(hash);
       }
@@ -120,34 +156,41 @@ export default function SectionTabs() {
 
       {/* Sub-nav para Menú */}
       {active === "menu" && (
-        <div className="mx-auto mb-8 flex max-w-6xl gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mb-10 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-6">
-          {menu.map((c) => {
-            const isActive = menuSub === c.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => {
-                  setMenuSub(c.id);
-                  history.replaceState(null, "", `#${c.id}`);
-                }}
-                className={`flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] tracking-wider uppercase transition-all sm:px-4 sm:text-xs ${
-                  isActive
-                    ? "border-[var(--red)] bg-[var(--red)]/15 text-white"
-                    : "border-[var(--red)]/15 text-white/50 hover:border-[var(--red)]/40 hover:text-white"
-                }`}
-              >
-                {c.title}
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <MenuSwitcher
+            active={menuKind}
+            current={currentKind}
+            onChange={setMenuKind}
+          />
+          <div className="mx-auto mb-8 flex max-w-6xl gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mb-10 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-6">
+            {activeMenuData.map((c) => {
+              const isActive = menuSub === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setMenuSub(c.id);
+                    history.replaceState(null, "", `#${c.id}`);
+                  }}
+                  className={`flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] tracking-wider uppercase transition-all sm:px-4 sm:text-xs ${
+                    isActive
+                      ? "border-[var(--red)] bg-[var(--red)]/15 text-white"
+                      : "border-[var(--red)]/15 text-white/50 hover:border-[var(--red)]/40 hover:text-white"
+                  }`}
+                >
+                  {c.title}
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Contenido */}
       <div id="seccion-activa" className="scroll-mt-24">
         <AnimatePresence mode="wait">
           <motion.div
-            key={active === "menu" ? `menu-${menuSub}` : active}
+            key={active === "menu" ? `menu-${menuKind}-${menuSub}` : active}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -155,9 +198,9 @@ export default function SectionTabs() {
           >
             {active === "menu" && (
               <>
-                <PromoBanner />
+                {menuKind === "regular" && <PromoBanner />}
                 {(() => {
-                  const cat = menu.find((c) => c.id === menuSub);
+                  const cat = activeMenuData.find((c) => c.id === menuSub);
                   return cat ? <MenuCategory category={cat} /> : null;
                 })()}
               </>
