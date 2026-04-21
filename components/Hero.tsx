@@ -102,6 +102,18 @@ export default function Hero() {
         >
           <a
             href="#menu"
+            onClick={(e) => {
+              e.preventDefault();
+              // Forzar el re-trigger del hash si ya está en #menu
+              if (window.location.hash === "#menu") {
+                window.location.hash = "";
+                setTimeout(() => {
+                  window.location.hash = "menu";
+                }, 10);
+              } else {
+                window.location.hash = "menu";
+              }
+            }}
             className="group relative inline-flex w-full max-w-xs items-center justify-center overflow-hidden rounded-full bg-[var(--red)] px-10 py-4 font-sans text-sm font-bold tracking-[0.2em] text-white uppercase transition-all active:scale-95 hover:bg-[var(--red-bright)] sm:w-auto"
           >
             <span className="relative z-10">Ver la carta</span>
@@ -109,6 +121,17 @@ export default function Hero() {
           </a>
           <a
             href="#eventos"
+            onClick={(e) => {
+              e.preventDefault();
+              if (window.location.hash === "#eventos") {
+                window.location.hash = "";
+                setTimeout(() => {
+                  window.location.hash = "eventos";
+                }, 10);
+              } else {
+                window.location.hash = "eventos";
+              }
+            }}
             className="font-sans text-xs font-semibold tracking-[0.2em] text-white/70 uppercase transition-colors active:text-white sm:text-sm"
           >
             Eventos en vivo →

@@ -62,17 +62,27 @@ export default function SectionTabs() {
     const syncFromHash = () => {
       const hash = window.location.hash.slice(1);
       if (!hash) return;
+      let shouldScroll = false;
       if (TABS.some((t) => t.id === hash)) {
         setActive(hash);
-        return;
+        shouldScroll = true;
+      } else {
+        const allCats = [
+          ...MENU_SCHEDULE.regular.data,
+          ...MENU_SCHEDULE.tradicional.data,
+        ];
+        if (allCats.some((c) => c.id === hash)) {
+          setActive("menu");
+          setMenuSub(hash);
+          shouldScroll = true;
+        }
       }
-      const allCats = [
-        ...MENU_SCHEDULE.regular.data,
-        ...MENU_SCHEDULE.tradicional.data,
-      ];
-      if (allCats.some((c) => c.id === hash)) {
-        setActive("menu");
-        setMenuSub(hash);
+      if (shouldScroll) {
+        setTimeout(() => {
+          document
+            .getElementById("tabs-section")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
       }
     };
     syncFromHash();
@@ -91,7 +101,7 @@ export default function SectionTabs() {
   };
 
   return (
-    <section className="relative py-8 sm:py-12">
+    <section id="tabs-section" className="relative scroll-mt-0 py-8 sm:py-12">
       {/* Tab bar */}
       <div className="sticky top-0 z-30 mb-6 border-y border-[var(--red)]/15 bg-black/85 px-3 py-3 backdrop-blur-xl sm:mb-8 sm:px-6 sm:py-4">
         <div className="mx-auto max-w-6xl">
