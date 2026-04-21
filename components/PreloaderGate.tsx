@@ -4,26 +4,25 @@ import { AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import Preloader from "./Preloader";
 
-const KEY = "cp-preloader-seen";
-
 export default function PreloaderGate() {
-  const [show, setShow] = useState(false);
+  // Show=true por defecto → el preloader se renderiza en el primer frame,
+  // evita el flash de la página principal antes de que hydrate React.
+  const [show, setShow] = useState(true);
 
   useEffect(() => {
-    const seen = sessionStorage.getItem(KEY);
-    if (!seen) setShow(true);
+    // Al cargar la página (incluyendo reload), limpiar hash → vuelve al hero
+    if (window.location.hash) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      // Notificar a los listeners que el hash cambió
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    }
+    // Scroll arriba
+    window.scrollTo(0, 0);
   }, []);
 
   return (
     <AnimatePresence>
-      {show && (
-        <Preloader
-          onFinish={() => {
-            sessionStorage.setItem(KEY, "1");
-            setShow(false);
-          }}
-        />
-      )}
+      {show && <Preloader onFinish={() => setShow(false)} />}
     </AnimatePresence>
   );
 }
