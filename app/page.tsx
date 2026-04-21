@@ -8,6 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import SpinWheel from "@/components/SpinWheel";
 import HappyHourBadge from "@/components/HappyHourBadge";
 import TopBar from "@/components/TopBar";
+import HeroWrapper from "@/components/HeroWrapper";
 
 export default function Home() {
   return (
@@ -17,8 +18,10 @@ export default function Home() {
       <Embers count={35} />
       <TopBar />
       <SearchBar />
-      <Hero />
-      <AboutStrip />
+      <HeroWrapper>
+        <Hero />
+        <AboutStrip />
+      </HeroWrapper>
       <SectionTabs />
       <Footer />
       <HappyHourBadge />

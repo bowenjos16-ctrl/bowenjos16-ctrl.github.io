@@ -25,9 +25,14 @@ export default function TopBar() {
           className="fixed top-4 left-1/2 z-40 -translate-x-1/2"
         >
           <a
-            href="#top"
+            href="/"
             onClick={(e) => {
               e.preventDefault();
+              // Limpiar hash para mostrar hero de nuevo + dispatch event
+              if (window.location.hash) {
+                history.pushState(null, "", window.location.pathname);
+                window.dispatchEvent(new HashChangeEvent("hashchange"));
+              }
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className="flex items-center gap-3 rounded-full border border-[var(--red)]/30 bg-[var(--background)]/80 px-5 py-2 shadow-lg shadow-black/40 backdrop-blur-lg transition-all hover:border-[var(--red)]/60"
