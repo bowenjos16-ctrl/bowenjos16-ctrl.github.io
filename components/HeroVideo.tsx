@@ -46,15 +46,18 @@ export default function HeroVideo() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <iframe
           ref={iframeRef}
-          className="absolute top-1/2 left-1/2 h-[120vh] w-[220vw] -translate-x-1/2 -translate-y-1/2 md:h-[135%] md:w-[135%]"
-          src={`https://www.youtube-nocookie.com/embed/${CONFIG.heroVideoId}?${params.toString()}`}
+          className="pointer-events-none absolute top-1/2 left-1/2 h-[150vh] w-[280vw] -translate-x-1/2 -translate-y-1/2 md:h-[180%] md:w-[180%]"
+          src={`https://www.youtube.com/embed/${CONFIG.heroVideoId}?${params.toString()}`}
           title="Piñas, El Oro — Ecuador"
           allow="autoplay; encrypted-media; picture-in-picture"
           frameBorder={0}
+          loading="eager"
         />
-        {/* Overlay oscuro para legibilidad */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(0,0,0,0.85)_100%)]" />
+        {/* Overlay mínimo — dejar que se vea el video */}
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(0,0,0,0.75)_100%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/60 to-transparent" />
       </div>
     );
   }
