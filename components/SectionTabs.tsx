@@ -9,14 +9,12 @@ import {
   ImageIcon,
   Gamepad2,
   Star,
-  Headphones,
   type LucideIcon,
 } from "lucide-react";
 
 import MenuCategory from "@/components/MenuCategory";
 import ChefPick from "@/components/ChefPick";
 import Gallery from "@/components/Gallery";
-import AudioRecommendation from "@/components/AudioRecommendation";
 import LiveEvents from "@/components/LiveEvents";
 import RatingSystem from "@/components/RatingSystem";
 import GameZone from "@/components/GameZone";
@@ -37,7 +35,6 @@ const TABS: Tab[] = [
   { id: "menu", label: "Menú", icon: UtensilsCrossed, color: "#c8202e" },
   { id: "eventos", label: "Eventos", icon: CalendarDays, color: "#c73838" },
   { id: "chef", label: "Chef", icon: ChefHat, color: "#c8202e" },
-  { id: "audio", label: "Audio", icon: Headphones, color: "#ffffff" },
   { id: "galeria", label: "Galería", icon: ImageIcon, color: "#c8202e" },
   { id: "juegos", label: "Juegos", icon: Gamepad2, color: "#ff5a2e" },
   { id: "opina", label: "Opina", icon: Star, color: "#ffffff" },
@@ -152,7 +149,7 @@ export default function SectionTabs() {
             current={currentKind}
             onChange={setMenuKind}
           />
-          <div className="mx-auto mb-8 flex max-w-6xl gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mb-10 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-6">
+          <div className="mx-auto mb-10 flex max-w-5xl gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-6">
             {activeMenuData.map((c) => {
               const isActive = menuSub === c.id;
               return (
@@ -162,10 +159,10 @@ export default function SectionTabs() {
                     setMenuSub(c.id);
                     history.replaceState(null, "", `#${c.id}`);
                   }}
-                  className={`flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] tracking-wider uppercase transition-all sm:px-4 sm:text-xs ${
+                  className={`flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[10px] font-medium tracking-wide uppercase transition-all sm:text-[11px] ${
                     isActive
-                      ? "border-[var(--red)] bg-[var(--red)]/15 text-white"
-                      : "border-[var(--red)]/15 text-white/50 hover:border-[var(--red)]/40 hover:text-white"
+                      ? "bg-[var(--red)] text-white"
+                      : "text-white/45 hover:text-white/80"
                   }`}
                 >
                   {c.title}
@@ -197,7 +194,6 @@ export default function SectionTabs() {
             )}
             {active === "eventos" && <LiveEvents />}
             {active === "chef" && <ChefPick />}
-            {active === "audio" && <AudioRecommendation />}
             {active === "galeria" && <Gallery />}
             {active === "juegos" && <GameZone />}
             {active === "opina" && (
