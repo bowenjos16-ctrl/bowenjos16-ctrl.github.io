@@ -3,7 +3,7 @@ import Hero from "@/components/Hero";
 import AboutStrip from "@/components/AboutStrip";
 import SectionTabs from "@/components/SectionTabs";
 import Footer from "@/components/Footer";
-import SplashGate from "@/components/SplashGate";
+import PreloaderGate from "@/components/PreloaderGate";
 import SearchBar from "@/components/SearchBar";
 import SpinWheel from "@/components/SpinWheel";
 import HappyHourBadge from "@/components/HappyHourBadge";
@@ -14,7 +14,7 @@ export default function Home() {
   return (
     <main className="relative min-h-screen">
       <div id="top" />
-      <SplashGate />
+      <PreloaderGate />
       <Embers count={35} />
       <TopBar />
       <SearchBar />
