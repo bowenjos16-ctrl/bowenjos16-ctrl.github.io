@@ -5,10 +5,12 @@ import { useRef } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 import HeroVideo from "./HeroVideo";
 import Logo from "./Logo";
+import { useTheme } from "./ThemeProvider";
 import { CONFIG } from "@/lib/config";
 
 export default function Hero() {
   const ref = useRef<HTMLDivElement>(null);
+  const { menuKind } = useTheme();
   const { scrollYProgress } = useScroll({
     target: ref,
     offset: ["start start", "end start"],
@@ -53,10 +55,10 @@ export default function Hero() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.9, ease: [0.23, 1, 0.32, 1] }}
-          className="flame-flicker drop-shadow-[0_0_30px_rgba(200,32,46,0.35)]"
+          className="flame-flicker drop-shadow-[0_0_30px_rgba(var(--red-rgb),0.35)]"
         >
           <Logo
-            variant="stacked"
+            variant={menuKind === "tradicional" ? "stacked-green" : "stacked"}
             width={420}
             priority
             className="h-auto w-[min(75vw,300px)] sm:w-[min(70vw,380px)] md:w-[420px]"

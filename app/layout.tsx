@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
+import ThemeProvider from "@/components/ThemeProvider";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -36,7 +37,7 @@ export default function RootLayout({
     <html lang="es" className="dark">
       <body className={`${playfair.variable} ${inter.variable} antialiased`}>
         <div className="grain" />
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

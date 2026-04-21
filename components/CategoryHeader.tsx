@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { useTheme } from "./ThemeProvider";
 
 export default function CategoryHeader({
   title,
@@ -10,6 +11,9 @@ export default function CategoryHeader({
   title: string;
   tagline: string;
 }) {
+  const { menuKind } = useTheme();
+  const flameSrc =
+    menuKind === "tradicional" ? "/brand/flame-green.webp" : "/brand/flame-red.webp";
   return (
     <div className="mb-14 flex flex-col items-center text-center">
       <motion.div
@@ -20,10 +24,10 @@ export default function CategoryHeader({
         className="relative mb-6 h-16 w-16 flame-flicker"
       >
         <Image
-          src="/brand/flame-red.webp"
+          src={flameSrc}
           alt=""
           fill
-          className="object-contain drop-shadow-[0_0_15px_rgba(200,32,46,0.5)]"
+          className="object-contain drop-shadow-[0_0_15px_rgba(var(--red-rgb),0.5)]"
         />
       </motion.div>
 

@@ -3,9 +3,11 @@
 import { motion } from "framer-motion";
 import { Instagram, Wifi, MapPin, MessageCircle, Phone } from "lucide-react";
 import Logo from "./Logo";
+import { useTheme } from "./ThemeProvider";
 import { CONFIG, waGeneralLink } from "@/lib/config";
 
 export default function Footer() {
+  const { menuKind } = useTheme();
   const links = [
     {
       icon: MessageCircle,
@@ -47,7 +49,11 @@ export default function Footer() {
           transition={{ duration: 0.8 }}
           className="mx-auto flex justify-center flame-flicker drop-shadow-[0_0_20px_rgba(200,32,46,0.25)]"
         >
-          <Logo variant="stacked" width={220} className="h-auto w-[min(70vw,220px)]" />
+          <Logo
+            variant={menuKind === "tradicional" ? "stacked-green" : "stacked"}
+            width={220}
+            className="h-auto w-[min(70vw,220px)]"
+          />
         </motion.div>
 
         <motion.p

@@ -3,17 +3,18 @@
 import Image from "next/image";
 
 type Props = {
-  variant?: "white" | "stacked" | "flame";
+  variant?: "white" | "stacked" | "stacked-green" | "flame" | "flame-green";
   className?: string;
   width?: number;
   priority?: boolean;
 };
 
-// Dimensiones reales de cada archivo (preservar aspect ratio)
 const META = {
   white: { src: "/brand/logo-white.webp", w: 1313, h: 531 },
   stacked: { src: "/brand/logo-stacked.webp", w: 900, h: 1013 },
+  "stacked-green": { src: "/brand/logo-stacked-green.webp", w: 900, h: 1013 },
   flame: { src: "/brand/flame-red.webp", w: 513, h: 1114 },
+  "flame-green": { src: "/brand/flame-green.webp", w: 513, h: 1114 },
 };
 
 export default function Logo({

@@ -1,17 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  /* Paleta oficial Corte Piedra — negro puro + blanco + rojo */
+  /* Paleta oficial Corte Piedra — tarde/noche: negro + blanco + rojo */
   --background: #000000;
   --foreground: #ffffff;
 
-  --red: #c8202e;           /* rojo principal del tagline */
-  --red-deep: #8b1621;      /* rojo sombra */
-  --red-bright: #e8344a;    /* rojo brillante highlight */
+  /* Acento: rojo por defecto (menú principal) */
+  --red: #c8202e;
+  --red-deep: #8b1621;
+  --red-bright: #e8344a;
+  --red-rgb: 200, 32, 46;
 
   --charcoal: #0a0a0a;
   --mute: rgba(255, 255, 255, 0.06);
   --line: rgba(255, 255, 255, 0.1);
+}
+
+/* Menú Tradicional (mañana) — override a verde bosque + verde brillante */
+[data-theme="morning"] {
+  --red: #1e8a3e;           /* verde principal */
+  --red-deep: #0f5a27;      /* verde sombra */
+  --red-bright: #33b85f;    /* verde highlight */
+  --red-rgb: 30, 138, 62;
+}
+
+/* Hue-rotate para la llama y otros elementos rojos embebidos */
+[data-theme="morning"] .brand-flame,
+[data-theme="morning"] .logo-tinted {
+  filter: hue-rotate(125deg) saturate(1.05) brightness(1.05);
 }
 
 @theme inline {
@@ -68,8 +84,8 @@ body {
 }
 
 @keyframes pulse-red {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(200, 32, 46, 0.5); }
-  50% { box-shadow: 0 0 0 20px rgba(200, 32, 46, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--red-rgb), 0.5); }
+  50% { box-shadow: 0 0 0 20px rgba(var(--red-rgb), 0); }
 }
 
 .red-gradient {
@@ -91,10 +107,10 @@ body {
 .red-border {
   position: relative;
   background: #0a0a0a;
-  border: 1px solid rgba(200, 32, 46, 0.25);
+  border: 1px solid rgba(var(--red-rgb), 0.25);
 }
 
-.red-border:hover { border-color: rgba(200, 32, 46, 0.6); }
+.red-border:hover { border-color: rgba(var(--red-rgb), 0.6); }
 
 .ember {
   position: absolute;
@@ -124,8 +140,8 @@ body {
 }
 
 .tag-badge {
-  background: rgba(200, 32, 46, 0.12);
-  border: 1px solid rgba(200, 32, 46, 0.35);
+  background: rgba(var(--red-rgb), 0.12);
+  border: 1px solid rgba(var(--red-rgb), 0.35);
   backdrop-filter: blur(10px);
 }
 
@@ -142,8 +158,8 @@ body {
 }
 .card-hover:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px -20px rgba(200, 32, 46, 0.3);
-  border-color: rgba(200, 32, 46, 0.5);
+  box-shadow: 0 20px 40px -20px rgba(var(--red-rgb), 0.3);
+  border-color: rgba(var(--red-rgb), 0.5);
 }
 
 .grain {

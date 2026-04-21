@@ -23,11 +23,8 @@ import GameZone from "@/components/GameZone";
 import SocialIncentive from "@/components/SocialIncentive";
 import PromoBanner from "@/components/PromoBanner";
 import MenuSwitcher from "@/components/MenuSwitcher";
-import {
-  MENU_SCHEDULE,
-  getMenuKindByHour,
-  type MenuKind,
-} from "@/lib/menu-schedule";
+import { useTheme } from "@/components/ThemeProvider";
+import { MENU_SCHEDULE } from "@/lib/menu-schedule";
 
 type Tab = {
   id: string;
@@ -48,26 +45,9 @@ const TABS: Tab[] = [
 
 export default function SectionTabs() {
   const [active, setActive] = useState("menu");
-  // Qué menú es el "activo por horario"
-  const [currentKind, setCurrentKind] = useState<MenuKind>("regular");
-  // Qué menú está viendo el usuario (puede diferir del activo)
-  const [menuKind, setMenuKind] = useState<MenuKind>("regular");
+  const { menuKind, setMenuKind, currentKind } = useTheme();
   const activeMenuData = MENU_SCHEDULE[menuKind].data;
   const [menuSub, setMenuSub] = useState(activeMenuData[0].id);
-
-  // Detectar menú activo por hora + auto-refresh cada minuto
-  useEffect(() => {
-    const sync = () => {
-      const kind = getMenuKindByHour(new Date().getHours());
-      setCurrentKind(kind);
-      // Si es la primera carga, poner al usuario en el menú activo
-      setMenuKind((prev) => (prev === kind ? prev : kind));
-    };
-    sync();
-    const id = setInterval(sync, 60_000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Cuando cambia el menú seleccionado, resetear sub-categoría a la primera
   useEffect(() => {

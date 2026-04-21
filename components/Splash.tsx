@@ -65,8 +65,8 @@ export default function Splash({ onClose }: { onClose: () => void }) {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        {/* Fondo radial rojo sutil */}
-        <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_at_center,rgba(200,32,46,0.18),transparent_60%)]" />
+        {/* Fondo radial tintado con acento del tema activo */}
+        <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_at_center,rgba(var(--red-rgb),0.18),transparent_60%)]" />
 
         <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col items-center px-4 py-6 text-center sm:px-6 sm:py-10">
           {/* "Menú" título con líneas rojas */}
@@ -83,15 +83,15 @@ export default function Splash({ onClose }: { onClose: () => void }) {
             <span className="h-px w-10 bg-[var(--red)] sm:w-16" />
           </motion.div>
 
-          {/* Logo stacked flame + texto */}
+          {/* Logo stacked flame + texto — verde en la mañana, rojo en la tarde */}
           <motion.div
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.25, duration: 0.7, ease: [0.23, 1, 0.32, 1] }}
-            className="mt-4 flex justify-center flame-flicker drop-shadow-[0_0_24px_rgba(200,32,46,0.3)] sm:mt-6"
+            className="mt-4 flex justify-center flame-flicker drop-shadow-[0_0_24px_rgba(var(--red-rgb),0.3)] sm:mt-6"
           >
             <Logo
-              variant="stacked"
+              variant={kind === "tradicional" ? "stacked-green" : "stacked"}
               width={260}
               priority
               className="h-auto w-[min(60vw,220px)] sm:w-[min(70vw,260px)]"

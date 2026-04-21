@@ -13,8 +13,10 @@ export const CONFIG = {
   googleReviewUrl: "https://search.google.com/local/writereview?placeid=CORTE_PIEDRA_PLACE_ID",
 
   // YouTube video ID para fondo del hero (drone de Piñas)
-  // Reemplaza con el ID real (parte después de v=), ej: "dQw4w9WgXcQ"
-  heroVideoId: "",
+  heroVideoId: "LoEBnNiXRo4",
+  // Solo los primeros N segundos en loop
+  heroVideoStart: 0,
+  heroVideoEnd: 20,
 
   topPicks: [
     "Tomahawk",
