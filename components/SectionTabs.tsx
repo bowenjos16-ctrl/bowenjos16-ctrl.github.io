@@ -34,7 +34,7 @@ type Tab = {
 const TABS: Tab[] = [
   { id: "menu", label: "Menú", icon: UtensilsCrossed, color: "#c8202e" },
   { id: "eventos", label: "Eventos", icon: CalendarDays, color: "#c73838" },
-  { id: "chef", label: "Chef", icon: ChefHat, color: "#c8202e" },
+  { id: "cocina", label: "Cocina", icon: ChefHat, color: "#c8202e" },
   { id: "galeria", label: "Galería", icon: ImageIcon, color: "#c8202e" },
   { id: "juegos", label: "Juegos", icon: Gamepad2, color: "#ff5a2e" },
   { id: "opina", label: "Opina", icon: Star, color: "#ffffff" },
@@ -193,7 +193,7 @@ export default function SectionTabs() {
               </>
             )}
             {active === "eventos" && <LiveEvents />}
-            {active === "chef" && <ChefPick />}
+            {active === "cocina" && <ChefPick />}
             {active === "galeria" && <Gallery />}
             {active === "juegos" && <GameZone />}
             {active === "opina" && (
