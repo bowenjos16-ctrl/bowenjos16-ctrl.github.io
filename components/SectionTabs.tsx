@@ -17,7 +17,7 @@ import ChefPick from "@/components/ChefPick";
 import Gallery from "@/components/Gallery";
 import LiveEvents from "@/components/LiveEvents";
 import RatingSystem from "@/components/RatingSystem";
-import GameZone from "@/components/GameZone";
+import GameGate from "@/components/GameGate";
 import SocialIncentive from "@/components/SocialIncentive";
 import PromoBanner from "@/components/PromoBanner";
 import MenuSwitcher from "@/components/MenuSwitcher";
@@ -195,7 +195,7 @@ export default function SectionTabs() {
             {active === "eventos" && <LiveEvents />}
             {active === "cocina" && <ChefPick />}
             {active === "galeria" && <Gallery />}
-            {active === "juegos" && <GameZone />}
+            {active === "juegos" && <GameGate />}
             {active === "opina" && (
               <>
                 <SocialIncentive />

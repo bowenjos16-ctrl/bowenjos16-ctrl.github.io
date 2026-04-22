@@ -71,6 +71,10 @@ export const CONFIG = {
   // Deploy instructions en /docs/apps-script.md
   ratingEndpoint: "",
 
+  // URL del Apps Script Web App para fidelización (misma URL si usas el script combinado)
+  // Ver /docs/apps-script-combined.gs y /docs/LOYALTY-SETUP.md
+  loyaltyApi: "",
+
   // Chef info
   chef: {
     name: "Chef Corte Piedra",

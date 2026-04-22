@@ -9,6 +9,8 @@ import SpinWheel from "@/components/SpinWheel";
 import HappyHourBadge from "@/components/HappyHourBadge";
 import TopBar from "@/components/TopBar";
 import HeroWrapper from "@/components/HeroWrapper";
+import LoyaltyButton from "@/components/LoyaltyButton";
+import LoyaltyModal from "@/components/LoyaltyModal";
 
 export default function Home() {
   return (
@@ -17,6 +19,7 @@ export default function Home() {
       <PreloaderGate />
       <Embers count={35} />
       <TopBar />
+      <LoyaltyButton />
       <SearchBar />
       <HeroWrapper>
         <Hero />
@@ -26,6 +29,7 @@ export default function Home() {
       <Footer />
       <HappyHourBadge />
       <SpinWheel />
+      <LoyaltyModal />
     </main>
   );
 }
