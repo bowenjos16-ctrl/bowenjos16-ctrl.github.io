@@ -14,7 +14,7 @@
 
 const DEFAULT_CONFIG = {
   restaurante_nombre: "Corte Piedra",
-  restaurante_email_dueno: "bryanligabow@gmail.com",
+  restaurante_email_dueno: "bryanligabow@gmail.com, cortepiedra2024@gmail.com, jeanxo1234@gmail.com",
   restaurante_telefono: "+593 96 842 9494",
   puntos_por_visita: 50,
   cooldown_horas: 24,
