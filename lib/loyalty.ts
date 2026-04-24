@@ -65,14 +65,23 @@ async function apiPost<T = unknown>(body: Record<string, unknown>): Promise<T> {
     // Modo demo / sin backend
     return demoMock(body) as T;
   }
-  const res = await fetch(CONFIG.loyaltyApi, {
-    method: "POST",
-    mode: "cors",
-    redirect: "follow",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(body),
-  });
-  return (await res.json()) as T;
+  try {
+    const res = await fetch(CONFIG.loyaltyApi, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      console.error("[loyalty] respuesta no-JSON:", res.status, text.slice(0, 200));
+      throw new Error(`Respuesta inválida (${res.status})`);
+    }
+  } catch (err) {
+    console.error("[loyalty] fetch falló:", err);
+    throw err;
+  }
 }
 
 export async function apiRegister(input: {
