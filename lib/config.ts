@@ -80,8 +80,9 @@ export const CONFIG = {
   // Apps Script Web App URL (único endpoint para ratings + loyalty)
   ratingEndpoint:
     "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
-  loyaltyApi:
-    "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
+  // Usa proxy interno (/api/loyalty) para evitar bucle de redirect CORS
+  // que ocurre con Apps Script en POST cross-origin desde el navegador.
+  loyaltyApi: "/api/loyalty",
 
   // Juegos: 1 partida por login con cooldown
   gameCooldownHours: 10,
