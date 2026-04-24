@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { Search, X, ArrowRight } from "lucide-react";
 import { menu } from "@/lib/menu-data";
-import { waLink } from "@/lib/config";
 
 type Hit = {
   name: string;
@@ -155,16 +154,7 @@ export default function SearchBar() {
                     {h.price && (
                       <span className="price-tag text-lg">${h.price}</span>
                     )}
-                    <a
-                      href={waLink(h.name, h.price)}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label="Pedir por WhatsApp"
-                    >
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </a>
+                    <ArrowRight className="h-4 w-4 text-white/40 opacity-0 transition-opacity group-hover:opacity-100" />
                   </button>
                 ))}
               </div>

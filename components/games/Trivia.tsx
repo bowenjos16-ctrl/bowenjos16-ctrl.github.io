@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { Brain, Check, X, Trophy } from "lucide-react";
-import { waGeneralLink } from "@/lib/config";
 
 const QUESTIONS = [
   {
@@ -33,11 +32,14 @@ const QUESTIONS = [
   },
 ];
 
-export default function Trivia() {
+type GameProps = { onPlayed?: () => void; locked?: boolean };
+
+export default function Trivia({ onPlayed, locked }: GameProps = {}) {
   const [step, setStep] = useState(-1); // -1 = intro, 0..N-1 = preguntas, N = resultado
   const [answers, setAnswers] = useState<number[]>([]);
 
   const start = () => {
+    if (locked) return;
     setStep(0);
     setAnswers([]);
   };
@@ -45,7 +47,10 @@ export default function Trivia() {
   const answer = (idx: number) => {
     const next = [...answers, idx];
     setAnswers(next);
-    setStep(step + 1);
+    const nextStep = step + 1;
+    setStep(nextStep);
+    // cuando termina (nextStep === QUESTIONS.length) registrar el lock
+    if (nextStep === QUESTIONS.length && onPlayed) onPlayed();
   };
 
   const correct = answers.filter((a, i) => a === QUESTIONS[i].correct).length;
@@ -155,28 +160,23 @@ export default function Trivia() {
                   ¡Felicitaciones! Ganaste un cupón{" "}
                   <span className="text-[white]">TRIVIA10</span> por 10% OFF.
                 </p>
-                <a
-                  href={waGeneralLink(
-                    "Hola Corte Piedra 👋 Acerté la trivia. Tengo el cupón TRIVIA10 (10% OFF). Quiero pedir.",
-                  )}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-block rounded-full bg-[#25D366] px-6 py-2 text-xs font-bold tracking-widest text-white uppercase"
-                >
-                  Canjear en WhatsApp
-                </a>
+                <p className="mt-4 text-[11px] tracking-wider text-white/60 uppercase">
+                  Muestra este c\u00f3digo al mesero al pagar
+                </p>
               </>
             ) : (
               <p className="mt-2 text-sm text-[var(--foreground)]/70">
                 Sigue explorando el menú y vuelve a intentarlo.
               </p>
             )}
-            <button
-              onClick={() => setStep(-1)}
-              className="mt-4 block w-full text-xs tracking-widest text-[white]/60 uppercase underline underline-offset-4"
-            >
-              Jugar otra vez
-            </button>
+            {!onPlayed && !locked && (
+              <button
+                onClick={() => setStep(-1)}
+                className="mt-4 block w-full text-xs tracking-widest text-[white]/60 uppercase underline underline-offset-4"
+              >
+                Jugar otra vez
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Brain, Trophy, RotateCcw } from "lucide-react";
-import { waGeneralLink } from "@/lib/config";
 
 const DISHES = [
   { id: "tomahawk", emoji: "🥩", label: "Tomahawk" },
@@ -31,7 +30,9 @@ function shuffle(arr: Card[]) {
   return a;
 }
 
-export default function Memory() {
+type GameProps = { onPlayed?: () => void; locked?: boolean };
+
+export default function Memory({ onPlayed, locked }: GameProps = {}) {
   const [cards, setCards] = useState<Card[]>([]);
   const [flipped, setFlipped] = useState<number[]>([]);
   const [moves, setMoves] = useState(0);
@@ -71,11 +72,16 @@ export default function Memory() {
 
   useEffect(() => {
     if (cards.length && cards.every((c) => c.matched)) {
-      setTimeout(() => setWon(true), 500);
+      setTimeout(() => {
+        setWon(true);
+        if (onPlayed) onPlayed();
+      }, 500);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards]);
 
   const flip = (i: number) => {
+    if (locked) return;
     if (flipped.length >= 2 || flipped.includes(i) || cards[i].matched) return;
     setFlipped([...flipped, i]);
   };
@@ -121,16 +127,9 @@ export default function Memory() {
               Completado en {moves} movimientos. Cupón{" "}
               <span className="text-[white]">MEMO5</span> — 5% OFF.
             </p>
-            <a
-              href={waGeneralLink(
-                `Hola Corte Piedra 👋 Completé el memorama en ${moves} movs. Tengo el cupón MEMO5.`,
-              )}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-block rounded-full bg-[#25D366] px-6 py-2 text-xs font-bold tracking-widest text-white uppercase"
-            >
-              Canjear
-            </a>
+            <p className="mt-4 text-[11px] tracking-wider text-white/60 uppercase">
+              Muestra MEMO5 al mesero al pagar
+            </p>
           </motion.div>
         ) : (
           <motion.div

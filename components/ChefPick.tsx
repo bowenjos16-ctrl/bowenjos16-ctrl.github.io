@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import Image from "next/image";
 import { ChefHat, Play, X, Quote, Flame } from "lucide-react";
-import { CONFIG, waLink } from "@/lib/config";
+import { CONFIG } from "@/lib/config";
 
 type Media =
   | {
@@ -271,14 +271,6 @@ export default function ChefPick() {
                     </p>
                   )}
                 </div>
-                <a
-                  href={waLink(open.title)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-shrink-0 rounded-full bg-[#25D366] px-5 py-2.5 text-xs font-bold tracking-wider text-white uppercase"
-                >
-                  Pedir
-                </a>
               </div>
             </motion.div>
           </motion.div>

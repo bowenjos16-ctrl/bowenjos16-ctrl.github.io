@@ -4,16 +4,16 @@ import { motion } from "framer-motion";
 import { Instagram, Wifi, MapPin, MessageCircle, Phone } from "lucide-react";
 import Logo from "./Logo";
 import { useTheme } from "./ThemeProvider";
-import { CONFIG, waGeneralLink } from "@/lib/config";
+import { CONFIG, waReservation } from "@/lib/config";
 
 export default function Footer() {
   const { menuKind } = useTheme();
   const links = [
     {
       icon: MessageCircle,
-      label: "WhatsApp",
+      label: "Reservas",
       value: CONFIG.whatsappDisplay,
-      href: waGeneralLink(),
+      href: waReservation(),
       color: "#25D366",
     },
     {
@@ -25,8 +25,8 @@ export default function Footer() {
     },
     {
       icon: MapPin,
-      label: "Cómo llegar",
-      value: "Google Maps",
+      label: "Ubicación",
+      value: "Av. Kennedy · Cdla. San Francisco",
       href: CONFIG.mapsUrl,
       color: "#c8202e",
     },
@@ -71,14 +71,24 @@ export default function Footer() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.3 }}
-          href={waGeneralLink()}
+          href={waReservation()}
           target="_blank"
           rel="noreferrer"
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-8 py-4 text-sm font-bold tracking-widest text-white uppercase shadow-lg shadow-[#25D366]/30 transition-transform hover:scale-105"
         >
           <Phone className="h-4 w-4" />
-          Pedir por WhatsApp
+          Reservar por WhatsApp
         </motion.a>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.4 }}
+          className="mt-3 text-xs tracking-wider text-white/50"
+        >
+          Ciudadela San Francisco · Av. Kennedy · junto a la Urna
+        </motion.p>
 
         <motion.div
           initial={{ opacity: 0 }}

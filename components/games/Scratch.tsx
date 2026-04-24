@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift } from "lucide-react";
-import { waGeneralLink } from "@/lib/config";
 
 const PRIZES = [
   { label: "Bebida gratis", code: "DRINK", weight: 2 },
@@ -22,7 +21,9 @@ function pickPrize() {
   return PRIZES[0];
 }
 
-export default function Scratch() {
+type GameProps = { onPlayed?: () => void; locked?: boolean };
+
+export default function Scratch({ onPlayed, locked }: GameProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [prize] = useState(pickPrize);
   const [revealed, setRevealed] = useState(false);
@@ -54,7 +55,7 @@ export default function Scratch() {
   }, []);
 
   const scratch = (e: React.MouseEvent | React.TouchEvent) => {
-    if (revealed) return;
+    if (revealed || locked) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
@@ -77,7 +78,10 @@ export default function Scratch() {
     }
     const p = (cleared / (data.length / 40)) * 100;
     setPercent(p);
-    if (p > 45) setRevealed(true);
+    if (p > 45 && !revealed) {
+      setRevealed(true);
+      if (onPlayed) onPlayed();
+    }
   };
 
   return (
@@ -121,18 +125,13 @@ export default function Scratch() {
 
       <AnimatePresence>
         {revealed && (
-          <motion.a
+          <motion.p
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            href={waGeneralLink(
-              `Hola Corte Piedra 👋 Ganaste: ${prize.label} (código ${prize.code}). Quiero canjearlo.`,
-            )}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 block w-full rounded-full bg-[#25D366] py-3 text-center text-xs font-bold tracking-widest text-white uppercase shadow-lg shadow-[#25D366]/30"
+            className="mt-4 text-center text-[11px] tracking-wider text-white/60 uppercase"
           >
-            Canjear por WhatsApp
-          </motion.a>
+            Muestra este c\u00f3digo al mesero al pagar
+          </motion.p>
         )}
       </AnimatePresence>
 

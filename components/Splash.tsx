@@ -2,10 +2,10 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { Star, ArrowRight, Sun, Flame } from "lucide-react";
+import { Star, Sun, Flame } from "lucide-react";
 import Image from "next/image";
 import Logo from "./Logo";
-import { CONFIG, waLink } from "@/lib/config";
+import { CONFIG } from "@/lib/config";
 import { getMenuKindByHour, MENU_SCHEDULE } from "@/lib/menu-schedule";
 import { TOP_PICKS_TRADICIONAL } from "@/lib/menu-tradicional";
 
@@ -181,16 +181,9 @@ export default function Splash({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="flex items-center justify-between p-3 sm:p-4">
                     <span className="price-tag text-lg sm:text-xl">${p.price}</span>
-                    <a
-                      href={waLink(p.name, p.price)}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#25D366] px-3 py-1.5 text-[11px] font-semibold text-white sm:text-xs"
-                    >
-                      Pedir
-                      <ArrowRight className="h-3 w-3" />
-                    </a>
+                    <span className="text-[10px] tracking-widest text-[var(--red-bright)]/80 uppercase">
+                      {p.badge}
+                    </span>
                   </div>
                 </motion.div>
               ))}

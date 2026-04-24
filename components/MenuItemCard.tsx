@@ -1,9 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Sparkles, MessageCircle } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { MenuItem } from "@/lib/menu-data";
-import { waLink, ITEM_TAGS } from "@/lib/config";
+import { ITEM_TAGS } from "@/lib/config";
 
 const SUGGESTIONS: Record<string, string> = {
   Tomahawk: "Acompáñalo con una copa Casillero Cabernet",
@@ -59,17 +59,6 @@ export default function MenuItemCard({
         </div>
         {item.price && (
           <span className="price-tag text-lg sm:text-xl">${item.price}</span>
-        )}
-        {item.price && (
-          <a
-            href={waLink(item.name, item.price)}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Pedir ${item.name} por WhatsApp`}
-            className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#25D366]/20 text-[#25D366] opacity-0 transition-all group-hover:opacity-100 hover:bg-[#25D366] hover:text-white"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-          </a>
         )}
       </div>
       {item.description && (

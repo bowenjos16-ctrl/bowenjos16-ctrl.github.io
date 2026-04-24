@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift, X, Copy, Check } from "lucide-react";
-import { waGeneralLink } from "@/lib/config";
 
 const PRIZES = [
   { label: "5% OFF", value: "CORTE5", color: "#c8202e" },
@@ -122,7 +121,7 @@ export default function SpinWheel() {
               </h3>
               <p className="mt-1 text-sm text-[var(--foreground)]/60">
                 {already
-                  ? "Usa tu cupón al ordenar por WhatsApp"
+                  ? "Usa tu cupón al pagar en el restaurante"
                   : "Una sola tirada gratis por visita"}
               </p>
 
@@ -222,16 +221,9 @@ export default function SpinWheel() {
                       )}
                     </button>
                   </div>
-                  <a
-                    href={waGeneralLink(
-                      `Hola Corte Piedra 👋 Tengo el cupón *${won.value}* (${won.label}). Quiero hacer un pedido.`,
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-block rounded-full bg-[#25D366] px-6 py-2 text-xs font-semibold tracking-wider text-white uppercase"
-                  >
-                    Usar en WhatsApp
-                  </a>
+                  <p className="mt-3 text-[10px] tracking-wider text-white/60 uppercase">
+                    Muestra este c\u00f3digo al mesero al pagar
+                  </p>
                 </motion.div>
               )}
             </motion.div>

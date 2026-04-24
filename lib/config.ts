@@ -3,18 +3,28 @@ export const CONFIG = {
   tagline: "Parrilla & Mariscos",
   established: "2024",
   city: "Piñas, El Oro · Ecuador",
+  address: "Ciudadela San Francisco, Avenida Kennedy, junto a la Urna",
 
-  whatsapp: "593968429494",
-  whatsappDisplay: "+593 96 842 9494",
-  instagram: "cortepiedra",
-  instagramUrl: "https://instagram.com/cortepiedra",
-  mapsUrl: "https://maps.google.com/?q=Corte+Piedra+Restaurante+Piñas+Ecuador",
+  // Número único para reservas
+  whatsapp: "593980687349",
+  whatsappDisplay: "+593 98 068 7349",
+
+  instagram: "cortepiedra.rest",
+  instagramUrl:
+    "https://www.instagram.com/cortepiedra.rest?igsh=MTlqOTllZWIxN2Vrbg==",
+
+  mapsUrl:
+    "https://www.google.com/maps/search/?api=1&query=" +
+    encodeURIComponent(
+      "Corte Piedra, Ciudadela San Francisco, Av. Kennedy, Piñas, El Oro, Ecuador",
+    ),
+
   // URL de Google para dejar reseña pública
-  googleReviewUrl: "https://search.google.com/local/writereview?placeid=CORTE_PIEDRA_PLACE_ID",
+  googleReviewUrl:
+    "https://search.google.com/local/writereview?placeid=CORTE_PIEDRA_PLACE_ID",
 
   // YouTube video ID para fondo del hero (drone de Piñas)
   heroVideoId: "LoEBnNiXRo4",
-  // Solo los primeros N segundos en loop
   heroVideoStart: 0,
   heroVideoEnd: 20,
 
@@ -36,10 +46,10 @@ export const CONFIG = {
     discount: "2x1 en mojitos",
   },
 
-  // Eventos en vivo — editable
+  // Eventos en vivo
   liveEvents: [
     {
-      day: 5, // 0=Dom, 1=Lun, ..., 5=Viernes, 6=Sáb
+      day: 5,
       title: "Viernes de Karaoke",
       subtitle: "Abre tus cuerdas vocales con un cóctel en mano",
       startHour: 20,
@@ -67,15 +77,15 @@ export const CONFIG = {
     },
   ],
 
-  // URL pública del Google Apps Script Web App que recibe los ratings
-  // Deploy instructions en /docs/apps-script.md
-  ratingEndpoint: "",
+  // Apps Script Web App URL (único endpoint para ratings + loyalty)
+  ratingEndpoint:
+    "https://script.google.com/macros/s/AKfycbzMDfXb-MEftNXC3t5gNnNo2KSc6v5OCLh99deUq4ChC9A9g3haulF7scajMwoZOSdO/exec",
+  loyaltyApi:
+    "https://script.google.com/macros/s/AKfycbzMDfXb-MEftNXC3t5gNnNo2KSc6v5OCLh99deUq4ChC9A9g3haulF7scajMwoZOSdO/exec",
 
-  // URL del Apps Script Web App para fidelización (misma URL si usas el script combinado)
-  // Ver /docs/apps-script-combined.gs y /docs/LOYALTY-SETUP.md
-  loyaltyApi: "",
+  // Juegos: 1 partida por login con cooldown
+  gameCooldownHours: 10,
 
-  // Chef info
   chef: {
     name: "Chef Corte Piedra",
     role: "Cocina de autor · Desde 2024",
@@ -84,16 +94,28 @@ export const CONFIG = {
   },
 };
 
-export function waLink(productName: string, price?: string) {
-  const msg = price
-    ? `Hola Corte Piedra 👋 Quiero pedir:\n\n• ${productName} — $${price}\n\n¿Me confirman disponibilidad?`
-    : `Hola Corte Piedra 👋 Quiero pedir:\n\n• ${productName}\n\n¿Me confirman disponibilidad?`;
-  return `https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`;
+/**
+ * Links de WhatsApp — usado SOLO en puntos clave: reservas desde eventos y footer.
+ * El mensaje se orienta a reservar mesa, no a tomar pedido.
+ */
+export function waReservation(detail?: string) {
+  const base =
+    "Hola Corte Piedra 👋 Quiero hacer una reserva" +
+    (detail ? ` · ${detail}` : ".");
+  return `https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(base)}`;
 }
 
 export function waGeneralLink(
-  msg = "Hola Corte Piedra 👋 Quiero hacer un pedido.",
+  msg = "Hola Corte Piedra 👋 Quiero hacer una reserva.",
 ) {
+  return `https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`;
+}
+
+// Alias legacy para compatibilidad con componentes que aún lo usan internamente.
+export function waLink(productName: string, price?: string) {
+  const msg = price
+    ? `Hola Corte Piedra 👋 Quiero reservar y me interesa:\n\n• ${productName} — $${price}`
+    : `Hola Corte Piedra 👋 Quiero reservar y me interesa:\n\n• ${productName}`;
   return `https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`;
 }
 

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { Star, Send, Check, Loader2, ExternalLink } from "lucide-react";
-import { CONFIG, waGeneralLink } from "@/lib/config";
+import { CONFIG } from "@/lib/config";
 
 const STORAGE_KEY = "cp-rating";
 
@@ -44,7 +44,7 @@ export default function RatingSystem() {
       // Si es positivo (>= 4 estrellas), invita a reseñar en Google Maps
       if (stars >= 4) setRedirectGoogle(true);
     } catch (e) {
-      setError("No se pudo enviar. Intenta por WhatsApp.");
+      setError("No se pudo enviar. Intenta de nuevo en un momento.");
     } finally {
       setSending(false);
     }
@@ -192,18 +192,6 @@ export default function RatingSystem() {
                     </a>
                   </motion.div>
                 )}
-                <a
-                  href={waGeneralLink(
-                    `Hola Corte Piedra 👋 Acabo de calificar con ${stars} estrellas${
-                      comment ? `: ${comment}` : "."
-                    }`,
-                  )}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-block text-xs tracking-widest text-[white]/70 uppercase underline underline-offset-4 hover:text-[white]"
-                >
-                  Enviar también al WhatsApp
-                </a>
               </motion.div>
             )}
           </AnimatePresence>

@@ -11,7 +11,7 @@ import {
   Instagram,
   Camera,
 } from "lucide-react";
-import { CONFIG, waGeneralLink } from "@/lib/config";
+import { CONFIG } from "@/lib/config";
 
 const IMAGES = [
   { src: "/customers/client-3.webp", caption: "Cenas con velas" },
@@ -140,16 +140,6 @@ export default function Gallery() {
             >
               <Instagram className="h-4 w-4" />
               Seguir en IG
-            </a>
-            <a
-              href={waGeneralLink(
-                "Hola Corte Piedra 👋 Quiero compartir una foto de mi visita.",
-              )}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-white/30 px-5 py-2.5 text-xs font-bold tracking-widest text-white uppercase"
-            >
-              Enviar por WhatsApp
             </a>
           </div>
         </motion.div>

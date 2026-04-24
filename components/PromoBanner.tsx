@@ -2,9 +2,9 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { Clock, Flame, ArrowRight } from "lucide-react";
+import { Clock, Flame } from "lucide-react";
 import Image from "next/image";
-import { CONFIG, waLink } from "@/lib/config";
+import { CONFIG } from "@/lib/config";
 
 function useCountdown(targetHour: number) {
   const [time, setTime] = useState({ h: 0, m: 0, s: 0 });
@@ -116,15 +116,9 @@ export default function PromoBanner() {
                   </div>
                 ))}
               </div>
-              <a
-                href={waLink(p.title, discounted)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-[#25D366] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#25D366]/30 transition-all hover:scale-105"
-              >
-                Reclamar por WhatsApp
-                <ArrowRight className="h-4 w-4" />
-              </a>
+              <div className="flex items-center gap-2 rounded-full bg-[var(--red)]/15 border border-[var(--red)]/40 px-5 py-2.5 text-xs font-bold tracking-wider text-white uppercase">
+                <span>Pide en la mesa</span>
+              </div>
             </div>
           </div>
         </motion.div>
