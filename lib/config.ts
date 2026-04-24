@@ -79,9 +79,9 @@ export const CONFIG = {
 
   // Apps Script Web App URL (único endpoint para ratings + loyalty)
   ratingEndpoint:
-    "https://script.google.com/macros/s/AKfycbzMDfXb-MEftNXC3t5gNnNo2KSc6v5OCLh99deUq4ChC9A9g3haulF7scajMwoZOSdO/exec",
+    "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
   loyaltyApi:
-    "https://script.google.com/macros/s/AKfycbzMDfXb-MEftNXC3t5gNnNo2KSc6v5OCLh99deUq4ChC9A9g3haulF7scajMwoZOSdO/exec",
+    "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
 
   // Juegos: 1 partida por login con cooldown
   gameCooldownHours: 10,
