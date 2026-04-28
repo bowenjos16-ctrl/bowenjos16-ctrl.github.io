@@ -5,25 +5,13 @@ import { useState } from "react";
 import Image from "next/image";
 import { ChefHat, Play, X, Quote, Flame } from "lucide-react";
 import { CONFIG } from "@/lib/config";
+import { useTheme } from "@/components/ThemeProvider";
+import type { GalleryItem } from "@/lib/gallery-api";
 
-type Media =
-  | {
-      type: "image";
-      src: string;
-      title: string;
-      description?: string;
-    }
-  | {
-      type: "video";
-      src: string; // YouTube ID o URL
-      poster: string;
-      title: string;
-      description?: string;
-    };
+type Media = GalleryItem;
 
-// Al usar "video" type, poner el ID de YouTube en src.
-// Cuando subas videos reales, reemplaza estos con los IDs correctos.
-const MEDIA: Media[] = [
+// Fallback estático: se usa cuando el endpoint de Galería falla
+const MEDIA_FALLBACK: Media[] = [
   {
     type: "image",
     src: "/dishes/grill-hero.webp",
@@ -64,6 +52,10 @@ const MEDIA: Media[] = [
 
 export default function ChefPick() {
   const [open, setOpen] = useState<Media | null>(null);
+  const { liveGallery } = useTheme();
+  const MEDIA: Media[] = liveGallery?.cocina && liveGallery.cocina.length > 0
+    ? liveGallery.cocina
+    : MEDIA_FALLBACK;
 
   return (
     <section className="relative py-16 sm:py-20">
@@ -155,7 +147,7 @@ export default function ChefPick() {
               }`}
             >
               <Image
-                src={m.type === "image" ? m.src : m.poster}
+                src={m.type === "image" ? m.src : (m.poster || "/dishes/grill-hero.webp")}
                 alt={m.title}
                 fill
                 className="object-cover transition-transform duration-700 group-hover:scale-110"

@@ -249,6 +249,49 @@ Una fila por día. Se muestra como banner cuando estás en el menú regular ese 
 
 ---
 
+---
+
+# Galería de fotos (Cocina y Momentos compartidos)
+
+Las dos secciones del sitio que muestran fotos también son editables desde una sola hoja: **`Galeria`**.
+
+- **Sección "Nuestra cocina"** (Cocina) → fotos de platos firmados con descripción
+- **Sección "Momentos compartidos"** (Galería) → fotos de clientes y ambiente
+
+## Cómo agregar/editar una foto
+
+### Paso 1: Subir a Drive
+Igual que con el menú: subes la foto a la carpeta **Menu Imagenes** de Drive y la haces pública.
+
+### Paso 2: Agregar fila en `Galeria`
+
+| Columna | Valor cocina | Valor galería |
+|---|---|---|
+| `seccion` | `cocina` | `galeria` |
+| `tipo` | `image` o `video` | `image` |
+| `src` | URL de Drive (o YouTube ID si es video) | URL de Drive |
+| `poster` | _vacío_ (URL preview si es video) | _vacío_ |
+| `titulo` | "Al fuego vivo" | "Cenas con velas" |
+| `descripcion` | "Cortes premium..." | _opcional_ |
+| `order` | 1, 2, 3... | 1, 2, 3... |
+| `active` | TRUE | TRUE |
+
+### Para videos en Cocina
+- `tipo`: `video`
+- `src`: solo el ID de YouTube (la parte después de `?v=`, ejemplo: `dQw4w9WgXcQ`)
+- `poster`: URL de Drive con la imagen de portada
+- `descripcion`: opcional
+
+## Quitar foto
+
+Cambia `active` a `FALSE` (preferible) o borra la fila.
+
+## Reordenar
+
+Edita la columna `order`. Números menores aparecen primero.
+
+---
+
 ## ¿Algo no funciona?
 
 Contacta a soporte técnico (Bryan) con:

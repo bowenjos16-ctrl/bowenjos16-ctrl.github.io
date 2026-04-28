@@ -7,6 +7,8 @@ import type { MenuCategory } from "@/lib/menu-data";
 import { fetchMenu, refreshMenu } from "@/lib/menu-api";
 import type { EventsPayload } from "@/lib/events-api";
 import { fetchEvents, refreshEvents } from "@/lib/events-api";
+import type { GalleryPayload } from "@/lib/gallery-api";
+import { fetchGallery, refreshGallery } from "@/lib/gallery-api";
 
 type LiveMenus = {
   regular: MenuCategory[] | null;
@@ -22,6 +24,8 @@ type ThemeCtx = {
   refreshMenus: () => Promise<void>;
   liveEvents: EventsPayload | null;
   refreshEvents: () => Promise<void>;
+  liveGallery: GalleryPayload | null;
+  refreshGallery: () => Promise<void>;
 };
 
 const Ctx = createContext<ThemeCtx>({
@@ -33,6 +37,8 @@ const Ctx = createContext<ThemeCtx>({
   refreshMenus: async () => {},
   liveEvents: null,
   refreshEvents: async () => {},
+  liveGallery: null,
+  refreshGallery: async () => {},
 });
 
 export function useTheme() {
@@ -59,6 +65,7 @@ export default function ThemeProvider({
     tradicional: null,
   });
   const [liveEvents, setLiveEvents] = useState<EventsPayload | null>(null);
+  const [liveGallery, setLiveGallery] = useState<GalleryPayload | null>(null);
 
   // Detectar hora actual cada minuto
   useEffect(() => {
@@ -82,18 +89,20 @@ export default function ThemeProvider({
     }
   }, [menuKind]);
 
-  // Cargar menús + eventos live (Sheets) — al montar y cada 30 min
+  // Cargar menús + eventos + galería live (Sheets) — al montar y cada 30 min
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [regular, tradicional, events] = await Promise.all([
+      const [regular, tradicional, events, gallery] = await Promise.all([
         fetchMenu("regular"),
         fetchMenu("tradicional"),
         fetchEvents(),
+        fetchGallery(),
       ]);
       if (cancelled) return;
       setLiveMenus({ regular, tradicional });
       if (events) setLiveEvents(events);
+      if (gallery) setLiveGallery(gallery);
     };
     void load();
     const id = setInterval(load, 30 * 60_000);
@@ -116,6 +125,11 @@ export default function ThemeProvider({
     if (events) setLiveEvents(events);
   }, []);
 
+  const refreshGalleryCb = useCallback(async () => {
+    const gallery = await refreshGallery();
+    if (gallery) setLiveGallery(gallery);
+  }, []);
+
   const theme = menuKind === "tradicional" ? "morning" : "evening";
 
   return (
@@ -129,6 +143,8 @@ export default function ThemeProvider({
         refreshMenus,
         liveEvents,
         refreshEvents: refreshEventsCb,
+        liveGallery,
+        refreshGallery: refreshGalleryCb,
       }}
     >
       {children}

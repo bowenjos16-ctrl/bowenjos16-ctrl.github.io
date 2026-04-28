@@ -42,7 +42,8 @@ var SHEETS = {
   MENU_SEC: "Menu_Secciones",
   MENU_ITM: "Menu_Items",
   EVENTOS: "Eventos",
-  PROMOS: "Promos"
+  PROMOS: "Promos",
+  GALERIA: "Galeria"
 };
 
 // Recompensas por defecto - se crean en setup() si la hoja esta vacia
@@ -258,6 +259,10 @@ function doGet(e) {
     var nocache2 = e.parameter.nocache === "1" || e.parameter.nocache === "true";
     return json_(getEvents_({ nocache: nocache2 }));
   }
+  if (action === "getGallery") {
+    var nocache3 = e.parameter.nocache === "1" || e.parameter.nocache === "true";
+    return json_(getGallery_({ nocache: nocache3 }));
+  }
   return ContentService
     .createTextOutput("Corte Piedra API")
     .setMimeType(ContentService.MimeType.TEXT);
@@ -284,6 +289,7 @@ function doPost(e) {
       case "awardInstagramBonus": return json_(withLock_(function () { return awardInstagramBonus_(data); }));
       case "getMenu":    return json_(getMenu_(data.kind || "regular"));
       case "getEvents":  return json_(getEvents_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
+      case "getGallery": return json_(getGallery_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
@@ -1051,6 +1057,9 @@ function onEditMenu_(e) {
     }
     if (sheetName === SHEETS.EVENTOS || sheetName === SHEETS.PROMOS) {
       cache.remove("events");
+    }
+    if (sheetName === SHEETS.GALERIA) {
+      cache.remove("gallery");
     }
   } catch (err) {}
 }
@@ -1891,6 +1900,143 @@ function migrarEventosActuales() {
       "  - dia_semana vacío\n" +
       "  - fecha = 2026-05-15 (formato YYYY-MM-DD)\n\n" +
       "Cambios visibles en ~5 min o inmediato con Cmd+Shift+R."
+    );
+  } catch (e) {}
+}
+
+// =============================================================
+//  GALERIA (1 hoja: Galeria — secciones cocina y galeria)
+// =============================================================
+//
+// Endpoint:  GET ?action=getGallery (&nocache=1 opcional)
+// Retorna:   { ok, cocina: [...], galeria: [...], generatedAt }
+//
+// Hoja Galeria:
+//   seccion | tipo | src | poster | titulo | descripcion | order | active
+//
+//   - seccion: "cocina" o "galeria"
+//   - tipo: "image" o "video" (video solo aplica en cocina)
+//   - src: URL de Drive, ruta local (/dishes/foo.webp), o YouTube ID
+//   - poster: URL de imagen preview (solo si tipo=video)
+//   - titulo: texto que se muestra (en galeria es el caption)
+//   - descripcion: solo para cocina, opcional
+
+function getGallery_(opts) {
+  opts = opts || {};
+  var cache = CacheService.getScriptCache();
+  var cacheKey = "gallery";
+  if (!opts.nocache) {
+    try {
+      var cached = cache.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var rows = readSheet_(ss, SHEETS.GALERIA);
+  var cocina = [];
+  var galeria = [];
+
+  rows
+    .filter(function (r) { return truthy_(r.active); })
+    .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); })
+    .forEach(function (r) {
+      var seccion = String(r.seccion || "").toLowerCase().trim();
+      var tipo = String(r.tipo || "image").toLowerCase().trim();
+      var src = String(r.src || "").trim();
+      // Si parece URL de Drive, convertir a thumbnail
+      var srcOut = (tipo === "video") ? src : driveImageUrl_(src);
+      var item = {
+        type: tipo === "video" ? "video" : "image",
+        src: srcOut,
+        title: String(r.titulo || "")
+      };
+      if (tipo === "video" && r.poster) item.poster = driveImageUrl_(String(r.poster));
+      if (r.descripcion) item.description = String(r.descripcion);
+
+      if (seccion === "cocina") cocina.push(item);
+      else if (seccion === "galeria") galeria.push(item);
+    });
+
+  var result = {
+    ok: true,
+    cocina: cocina,
+    galeria: galeria,
+    generatedAt: new Date().toISOString()
+  };
+  try { cache.put(cacheKey, JSON.stringify(result), 300); } catch (e) {}
+  return result;
+}
+
+// =============================================================
+//  MIGRACION INICIAL GALERIA (one-shot)
+// =============================================================
+
+function migrarGaleriaActual() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ensureSheet_(ss, SHEETS.GALERIA,
+    ["seccion", "tipo", "src", "poster", "titulo", "descripcion", "order", "active"]);
+
+  // Protección
+  if (sh.getLastRow() > 1) {
+    try {
+      var ui = SpreadsheetApp.getUi();
+      var resp = ui.alert(
+        "⚠️ Hoja Galeria ya contiene datos",
+        "Si continúas, se BORRARÁN las imágenes y descripciones editadas manualmente.\n\n¿Continuar?",
+        ui.ButtonSet.YES_NO
+      );
+      if (resp !== ui.Button.YES) {
+        ui.alert("Migración cancelada.");
+        return;
+      }
+    } catch (e) {
+      throw new Error("La hoja ya tiene datos. Confirma desde el editor.");
+    }
+    sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent();
+  }
+
+  // Cocina (sección "Detrás del fuego" / Nuestra cocina)
+  var cocina = [
+    { tipo: "image", src: "/dishes/grill-hero.webp", titulo: "Al fuego vivo",
+      descripcion: "Cortes premium de res Brangus sellados sobre brasas directas." },
+    { tipo: "image", src: "/dishes/tigrillo.webp", titulo: "Tigrillo de la mañana",
+      descripcion: "Plátano verde majado con chicharrones y huevo." },
+    { tipo: "image", src: "/dishes/salmon.webp", titulo: "Salmón en salsa de naranja",
+      descripcion: "El plato firma del chef — reducción cítrica sobre papas chauchas." },
+    { tipo: "image", src: "/dishes/ceviche.webp", titulo: "Ceviche fresco",
+      descripcion: "Camarón, lima y ají suave con un toque peruano." },
+    { tipo: "image", src: "/dishes/burgers-pizza.webp", titulo: "Pizza artesanal",
+      descripcion: "Masa madre fermentada 24 horas y horneada al momento." },
+    { tipo: "image", src: "/dishes/cocktails.webp", titulo: "Bar en acción",
+      descripcion: "Mojitos, margaritas y sangrías preparadas al momento." }
+  ];
+  cocina.forEach(function (c, i) {
+    sh.appendRow(["cocina", c.tipo, c.src, "", c.titulo, c.descripcion, i + 1, true]);
+  });
+
+  // Galeria (sección Momentos compartidos / clientes)
+  var galeria = [
+    { src: "/customers/client-3.webp", titulo: "Cenas con velas" },
+    { src: "/customers/client-2.webp", titulo: "Entre amigos" },
+    { src: "/customers/client-4.webp", titulo: "Celebrando momentos" },
+    { src: "/customers/client-1.webp", titulo: "Ambiente Corte Piedra" },
+    { src: "/customers/client-5.webp", titulo: "Sobremesa con copas" },
+    { src: "/customers/client-8.webp", titulo: "Noches que quedan" },
+    { src: "/customers/client-6.webp", titulo: "Reuniones especiales" },
+    { src: "/customers/client-9.webp", titulo: "Buena mesa" }
+  ];
+  galeria.forEach(function (g, i) {
+    sh.appendRow(["galeria", "image", g.src, "", g.titulo, "", i + 1, true]);
+  });
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "Galería migrada.\n\n" +
+      "Hoja: Galeria (1 sola hoja con columna seccion).\n" +
+      "  - seccion = cocina → aparece en sección 'Nuestra cocina'\n" +
+      "  - seccion = galeria → aparece en sección 'Momentos compartidos'\n\n" +
+      "Para subir nuevas fotos: súbelas a Drive (carpeta Menu Imagenes) y pega el link en src."
     );
   } catch (e) {}
 }

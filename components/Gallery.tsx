@@ -12,8 +12,11 @@ import {
   Camera,
 } from "lucide-react";
 import { CONFIG } from "@/lib/config";
+import { useTheme } from "@/components/ThemeProvider";
 
-const IMAGES = [
+type GalleryImg = { src: string; caption: string };
+
+const IMAGES_FALLBACK: GalleryImg[] = [
   { src: "/customers/client-3.webp", caption: "Cenas con velas" },
   { src: "/customers/client-2.webp", caption: "Entre amigos" },
   { src: "/customers/client-4.webp", caption: "Celebrando momentos" },
@@ -26,6 +29,13 @@ const IMAGES = [
 
 export default function Gallery() {
   const [active, setActive] = useState<number | null>(null);
+  const { liveGallery } = useTheme();
+  // Convertir items live al formato local (caption en lugar de title)
+  const IMAGES: GalleryImg[] = liveGallery?.galeria && liveGallery.galeria.length > 0
+    ? liveGallery.galeria
+        .filter((g) => g.type === "image")
+        .map((g) => ({ src: g.src, caption: g.title }))
+    : IMAGES_FALLBACK;
 
   const prev = () =>
     setActive((i) =>
