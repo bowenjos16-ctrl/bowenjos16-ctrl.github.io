@@ -124,8 +124,8 @@ export default function Memory({ onPlayed, locked }: GameProps = {}) {
               ¡Ganaste!
             </h3>
             <p className="mt-2 text-sm text-[var(--foreground)]/70">
-              Completado en {moves} movimientos. Cupón{" "}
-              <span className="text-[white]">MEMO5</span> — 5% OFF.
+              Completado en {moves} movimientos. ¡Ganaste{" "}
+              <span className="text-[white]">vaso limonada a elección</span>!
             </p>
             <p className="mt-4 text-[11px] tracking-wider text-white/60 uppercase">
               Muestra MEMO5 al mesero al pagar

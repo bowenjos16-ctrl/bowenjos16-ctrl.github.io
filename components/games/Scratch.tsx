@@ -5,10 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift } from "lucide-react";
 
 const PRIZES = [
-  { label: "Bebida gratis", code: "DRINK", weight: 2 },
-  { label: "10% OFF", code: "SCRATCH10", weight: 5 },
-  { label: "Postre sorpresa", code: "SWEET", weight: 3 },
-  { label: "20% OFF", code: "SCRATCH20", weight: 1 },
+  { label: "5% descuento", code: "SCRATCH5", weight: 3 },
+  { label: "10% descuento", code: "SCRATCH10", weight: 2 },
+  { label: "50 puntos", code: "SCRATCH50PTS", weight: 2 },
+  { label: "100 puntos", code: "SCRATCH100PTS", weight: 2 },
+  { label: "Cóctel de autor", code: "COCKTAIL", weight: 3 },
+  { label: "$2.50 en consumo", code: "SCRATCH250", weight: 2 },
+  { label: "Más suerte a la próxima", code: "TRYAGAIN", weight: 3 },
 ];
 
 function pickPrize() {

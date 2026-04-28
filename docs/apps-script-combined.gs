@@ -268,6 +268,7 @@ function doPost(e) {
       case "getRewards": return json_(getRewards_());
       case "redeem":     return json_(withLock_(function () { return redeem_(data); }));
       case "getHistory": return json_(getHistory_(data));
+      case "awardInstagramBonus": return json_(withLock_(function () { return awardInstagramBonus_(data); }));
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
@@ -772,6 +773,65 @@ function getHistory_(data) {
   });
 
   return { ok: true, history: items.slice(0, limit) };
+}
+
+/**
+ * Otorga un bonus de 100 puntos por seguir en Instagram (una sola vez por usuario).
+ * Verifica si ya lo ha reclamado consultando las transacciones con marker "INSTAGRAM".
+ */
+function awardInstagramBonus_(data) {
+  var phone = normalizePhone_(data.telefono);
+  if (!phone) return { ok: false, error: "missing" };
+
+  // Idempotency: si reintenta, no duplicar bonus
+  if (isDuplicateRequest_(data.idempotencyKey)) {
+    return { ok: true, duplicate: true, message: "Bonus ya procesado" };
+  }
+
+  var c = findClientByPhone_(phone);
+  if (!c) return { ok: false, error: "not_found" };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var trx = ss.getSheetByName(SHEETS.TRX);
+  if (!trx) return { ok: false, error: "no_transactions_sheet" };
+
+  // Verificar si ya reclamo el bonus Instagram
+  var trxRows = trx.getDataRange().getValues();
+  for (var i = 1; i < trxRows.length; i++) {
+    if (normalizePhone_(trxRows[i][2]) === phone && String(trxRows[i][5] || "") === "INSTAGRAM") {
+      return { ok: false, error: "already_claimed", alreadyClaimed: true };
+    }
+  }
+
+  // Otorgar 100 puntos
+  var pointsBonus = 100;
+  var cli = ss.getSheetByName(SHEETS.CLI);
+  var rows = cli.getDataRange().getValues();
+  var cfg = readConfig_();
+  for (var j = 1; j < rows.length; j++) {
+    if (normalizePhone_(rows[j][2]) === phone) {
+      var rowIdx = j + 1;
+      var newCurrent = Number(rows[j][5] || 0) + pointsBonus;
+      var newTotal = Number(rows[j][6] || 0) + pointsBonus;
+      var nivel = computeLevel_(newTotal, cfg);
+      cli.getRange(rowIdx, 6).setValue(newCurrent);
+      cli.getRange(rowIdx, 7).setValue(newTotal);
+      cli.getRange(rowIdx, 8).setValue(nivel);
+      break;
+    }
+  }
+
+  // Registrar en transacciones con marker INSTAGRAM
+  trx.appendRow([
+    Utilities.getUuid(), c.id, phone, new Date(),
+    pointsBonus, "INSTAGRAM", ""
+  ]);
+
+  return {
+    ok: true,
+    pointsAwarded: pointsBonus,
+    client: findClientByPhone_(phone)
+  };
 }
 
 // =============================================================

@@ -157,8 +157,8 @@ export default function Trivia({ onPlayed, locked }: GameProps = {}) {
             {win ? (
               <>
                 <p className="mt-2 text-sm text-[var(--foreground)]/70">
-                  ¡Felicitaciones! Ganaste un cupón{" "}
-                  <span className="text-[white]">TRIVIA10</span> por 10% OFF.
+                  ¡Felicitaciones! Ganaste{" "}
+                  <span className="text-[white]">cualquier cóctel de autor</span> gratis.
                 </p>
                 <p className="mt-4 text-[11px] tracking-wider text-white/60 uppercase">
                   Muestra este c\u00f3digo al mesero al pagar

@@ -2,8 +2,9 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import { Star, Send, Check, Loader2, ExternalLink } from "lucide-react";
+import { Star, Send, Check, Loader2, ExternalLink, Instagram } from "lucide-react";
 import { CONFIG } from "@/lib/config";
+import { loadSession, apiAwardInstagramBonus } from "@/lib/loyalty";
 
 const STORAGE_KEY = "cp-rating";
 
@@ -16,6 +17,8 @@ export default function RatingSystem() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [redirectGoogle, setRedirectGoogle] = useState(false);
+  const [instagramAwardLoading, setInstagramAwardLoading] = useState(false);
+  const [instagramAwarded, setInstagramAwarded] = useState(false);
 
   const submit = async () => {
     if (stars === 0) return;
@@ -47,6 +50,40 @@ export default function RatingSystem() {
       setError("No se pudo enviar. Intenta de nuevo en un momento.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleInstagramClick = async () => {
+    const session = loadSession();
+    if (!session) {
+      // No logged in, just open Instagram
+      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // User is logged in, try to award bonus points
+    setInstagramAwardLoading(true);
+    try {
+      const res = await apiAwardInstagramBonus(session.client.telefono);
+      if (res.ok) {
+        setInstagramAwarded(true);
+        // Open Instagram
+        window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+      } else if (res.alreadyClaimed) {
+        // Already used the bonus
+        setInstagramAwarded(true);
+        window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+      } else {
+        // Error awarding points, but still open Instagram
+        console.error("Error awarding Instagram bonus:", res.error);
+        window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      console.error("Failed to award Instagram bonus:", err);
+      // Still open Instagram even if award failed
+      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setInstagramAwardLoading(false);
     }
   };
 
@@ -175,21 +212,53 @@ export default function RatingSystem() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.6 }}
-                    className="mt-8 rounded-2xl border border-[var(--red)]/30 bg-[var(--red)]/5 p-6"
+                    className="mt-8 space-y-4 rounded-2xl border border-[var(--red)]/30 bg-[var(--red)]/5 p-6"
                   >
-                    <p className="text-sm text-[var(--foreground)]/80">
-                      Nos encantaría que también la dejaras pública en Google.
-                      Nos ayuda a llegar a más comensales.
-                    </p>
-                    <a
-                      href={CONFIG.googleReviewUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#4285F4] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105"
-                    >
-                      Dejar reseña en Google
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+                    <div>
+                      <p className="text-sm text-[var(--foreground)]/80">
+                        Nos encantaría que también la dejaras pública en Google.
+                        Nos ayuda a llegar a más comensales.
+                      </p>
+                      <a
+                        href={CONFIG.googleReviewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#4285F4] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105"
+                      >
+                        Dejar reseña en Google
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+
+                    {loadSession() && (
+                      <div className="border-t border-[var(--red)]/20 pt-4">
+                        <p className="text-sm text-[var(--foreground)]/80">
+                          Síguenos en Instagram y gana <span className="font-bold text-[var(--red)]">100 puntos</span> en tu cuenta de loyalidad.
+                        </p>
+                        <button
+                          onClick={handleInstagramClick}
+                          disabled={instagramAwardLoading || instagramAwarded}
+                          className="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#dc2743] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105 disabled:opacity-60"
+                        >
+                          {instagramAwardLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Abriendo...
+                            </>
+                          ) : instagramAwarded ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Bonus agregado
+                            </>
+                          ) : (
+                            <>
+                              <Instagram className="h-4 w-4" />
+                              Seguir en Instagram
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </motion.div>

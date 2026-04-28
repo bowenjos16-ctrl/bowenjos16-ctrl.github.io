@@ -228,6 +228,19 @@ export async function apiGetHistory(telefono: string, limit = 20) {
   });
 }
 
+export async function apiAwardInstagramBonus(telefono: string) {
+  return apiPost<{
+    ok: boolean;
+    pointsAwarded?: number;
+    client?: LoyaltyClient;
+    error?: string;
+    alreadyClaimed?: boolean;
+  }>({
+    action: "awardInstagramBonus",
+    telefono: normalizePhone(telefono),
+  });
+}
+
 // ──────────────────────────────────────────────────────────
 // Session (localStorage)
 // ──────────────────────────────────────────────────────────
