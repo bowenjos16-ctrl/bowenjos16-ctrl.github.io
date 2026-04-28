@@ -2,15 +2,19 @@
  * Menu API client — fetch menu data from Apps Script with localStorage caching.
  *
  * Strategy:
- *   - localStorage cache (TTL 1 hour, stale-while-revalidate)
+ *   - localStorage cache (TTL 5 min, stale-while-revalidate)
  *   - Server cache 5 min (Apps Script CacheService)
  *   - Fallback: caller uses static menu-data.ts when this returns null
+ *
+ * Uses GET because POST to Apps Script Web App fails with 405 after the
+ * 302 redirect to script.googleusercontent.com (POST is rejected on the
+ * redirected URL). GET works correctly with CORS (Access-Control-Allow-Origin: *).
  */
 import { CONFIG } from "./config";
 import type { MenuCategory } from "./menu-data";
 import type { MenuKind } from "./menu-schedule";
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos (combinado con cache server 5 min: cambios visibles en ~5-10 min máx)
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 const CACHE_KEY_PREFIX = "cp_menu_";
 
 type MenuResponse = {
@@ -47,28 +51,49 @@ function writeCache(kind: MenuKind, data: MenuCategory[]) {
 }
 
 async function fetchAndCache(kind: MenuKind): Promise<MenuCategory[] | null> {
-  if (!CONFIG.loyaltyApi) return null;
+  if (!CONFIG.loyaltyApi) {
+    console.warn("[menu-api] No loyaltyApi URL configured");
+    return null;
+  }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  // Cache buster on URL forces server to skip its 5-min cache when explicitly requested
+  const url = `${CONFIG.loyaltyApi}?action=getMenu&kind=${encodeURIComponent(kind)}&t=${Date.now()}`;
   try {
-    const url = `${CONFIG.loyaltyApi}?action=getMenu&kind=${encodeURIComponent(kind)}`;
     const res = await fetch(url, {
       method: "GET",
       signal: ctrl.signal,
+      redirect: "follow",
+      mode: "cors",
+      credentials: "omit",
       cache: "no-store",
     });
+    if (!res.ok) {
+      console.error(`[menu-api] HTTP ${res.status} for ${kind}`);
+      return null;
+    }
     const text = await res.text();
-    // Detect HTML response (auth page, redirect, etc.)
-    if (text.trimStart().startsWith("<")) return null;
-    const json = JSON.parse(text) as MenuResponse;
-    if (!json || !json.ok || !Array.isArray(json.data)) return null;
+    if (text.trimStart().startsWith("<")) {
+      console.error("[menu-api] HTML response (Apps Script auth/deploy issue):", text.slice(0, 200));
+      return null;
+    }
+    let json: MenuResponse;
+    try {
+      json = JSON.parse(text) as MenuResponse;
+    } catch (parseErr) {
+      console.error("[menu-api] JSON parse failed:", parseErr, "Body:", text.slice(0, 200));
+      return null;
+    }
+    if (!json || !json.ok || !Array.isArray(json.data)) {
+      console.error("[menu-api] Invalid response shape:", json);
+      return null;
+    }
     writeCache(kind, json.data);
+    console.log(`[menu-api] ✓ Fetched ${kind} menu (${json.data.length} categories) at ${new Date().toISOString()}`);
     return json.data;
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[menu-api] fetch failed:", err);
-    }
+    console.error("[menu-api] ✗ Fetch failed for", kind, ":", err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -77,7 +102,7 @@ async function fetchAndCache(kind: MenuKind): Promise<MenuCategory[] | null> {
 
 /**
  * Fetch menu data for the given kind.
- * Returns cached data immediately if available (<1h old) and triggers a background refresh.
+ * Returns cached data immediately if available (<5 min old) and triggers a background refresh.
  * Otherwise fetches fresh data.
  * Returns null on failure — caller should fall back to static menu-data.
  */
@@ -94,14 +119,14 @@ export async function fetchMenu(kind: MenuKind): Promise<MenuCategory[] | null> 
 }
 
 /**
- * Force a fresh fetch, ignoring cache. Used by admin "refresh" button.
+ * Force a fresh fetch, ignoring cache.
  */
 export async function refreshMenu(kind: MenuKind): Promise<MenuCategory[] | null> {
   return fetchAndCache(kind);
 }
 
 /**
- * Clears the cached menus (both kinds). Useful for admin testing.
+ * Clears the cached menus (both kinds).
  */
 export function clearMenuCache(): void {
   if (typeof window === "undefined") return;
