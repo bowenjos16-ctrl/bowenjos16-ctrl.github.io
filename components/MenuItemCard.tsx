@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import Image from "next/image";
 import type { MenuItem } from "@/lib/menu-data";
 import { ITEM_TAGS } from "@/lib/config";
 
@@ -38,6 +39,18 @@ export default function MenuItemCard({
       }}
       className="group relative py-4"
     >
+      {item.image && (
+        <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded-lg ring-1 ring-white/10">
+          <Image
+            src={item.image}
+            alt={item.name}
+            fill
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            sizes="(max-width: 768px) 100vw, 600px"
+            unoptimized
+          />
+        </div>
+      )}
       <div className="flex items-baseline gap-2">
         <div className="flex flex-1 items-baseline">
           <h4 className="font-serif text-lg text-white transition-colors group-hover:text-[var(--red-bright)] sm:text-xl">

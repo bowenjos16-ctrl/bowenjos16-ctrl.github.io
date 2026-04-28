@@ -3,6 +3,7 @@ export type MenuItem = {
   price?: string;
   description?: string;
   badge?: string;
+  image?: string;
 };
 
 export type MenuSection = {

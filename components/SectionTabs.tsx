@@ -42,17 +42,19 @@ const TABS: Tab[] = [
 
 export default function SectionTabs() {
   const [active, setActive] = useState("menu");
-  const { menuKind, setMenuKind, currentKind } = useTheme();
-  const activeMenuData = MENU_SCHEDULE[menuKind].data;
+  const { menuKind, setMenuKind, currentKind, liveMenus } = useTheme();
+  // Datos "live" (Sheets) si están disponibles; si no, fallback a estático
+  const activeMenuData = liveMenus[menuKind] ?? MENU_SCHEDULE[menuKind].data;
   const [menuSub, setMenuSub] = useState(activeMenuData[0].id);
 
-  // Cuando cambia el menú seleccionado, resetear sub-categoría a la primera
+  // Cuando cambia el menú seleccionado o llegan datos live, validar sub-categoría
   useEffect(() => {
-    const first = MENU_SCHEDULE[menuKind].data[0].id;
+    const first = activeMenuData[0]?.id;
+    if (!first) return;
     setMenuSub((prev) =>
-      MENU_SCHEDULE[menuKind].data.some((c) => c.id === prev) ? prev : first,
+      activeMenuData.some((c) => c.id === prev) ? prev : first,
     );
-  }, [menuKind]);
+  }, [menuKind, activeMenuData]);
 
   // Read hash on mount + listen for changes
   useEffect(() => {

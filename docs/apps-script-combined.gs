@@ -37,7 +37,10 @@ var SHEETS = {
   PWD: "Passwords_Diarias",
   CFG: "Configuracion",
   FAIL: "Intentos_Fallidos",
-  REW: "Recompensas"
+  REW: "Recompensas",
+  MENU_CAT: "Menu_Categorias",
+  MENU_SEC: "Menu_Secciones",
+  MENU_ITM: "Menu_Items"
 };
 
 // Recompensas por defecto - se crean en setup() si la hoja esta vacia
@@ -245,6 +248,7 @@ function sendOwnerEmail_(cfg, pw, recipients) {
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action;
   if (action === "getConfig") return json_(getPublicConfig_());
+  if (action === "getMenu") return json_(getMenu_((e.parameter.kind || "regular")));
   return ContentService
     .createTextOutput("Corte Piedra API")
     .setMimeType(ContentService.MimeType.TEXT);
@@ -269,6 +273,7 @@ function doPost(e) {
       case "redeem":     return json_(withLock_(function () { return redeem_(data); }));
       case "getHistory": return json_(getHistory_(data));
       case "awardInstagramBonus": return json_(withLock_(function () { return awardInstagramBonus_(data); }));
+      case "getMenu":    return json_(getMenu_(data.kind || "regular"));
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
@@ -832,6 +837,686 @@ function awardInstagramBonus_(data) {
     pointsAwarded: pointsBonus,
     client: findClientByPhone_(phone)
   };
+}
+
+// =============================================================
+//  MENU EDITABLE (3 hojas: Categorias, Secciones, Items)
+// =============================================================
+//
+// Endpoint:  GET ?action=getMenu&kind=regular|tradicional
+// Retorna:   { ok, kind, data: MenuCategory[], generatedAt }
+//
+// Hojas:
+//   Menu_Categorias: menu_kind | id | title | tagline | icon | note | order | active
+//   Menu_Secciones:  category_id | id | title | subtitle | note | order | active
+//   Menu_Items:      section_id | name | price | description | badge | image_url | order | active
+//
+// Cache server: 5 min (CacheService).  Cache cliente: 1 h (localStorage).
+
+function getMenu_(menuKind) {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = "menu:" + menuKind;
+  try {
+    var cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var cats = readSheet_(ss, SHEETS.MENU_CAT);
+  var secs = readSheet_(ss, SHEETS.MENU_SEC);
+  var itms = readSheet_(ss, SHEETS.MENU_ITM);
+
+  var categories = cats
+    .filter(function (c) { return String(c.menu_kind) === menuKind && truthy_(c.active); })
+    .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); })
+    .map(function (c) {
+      var sections = secs
+        .filter(function (s) { return String(s.category_id) === String(c.id) && truthy_(s.active); })
+        .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); })
+        .map(function (s) {
+          var items = itms
+            .filter(function (i) { return String(i.section_id) === String(s.id) && truthy_(i.active); })
+            .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); })
+            .map(function (i) {
+              var out = { name: String(i.name || "") };
+              if (i.price !== "" && i.price !== null && i.price !== undefined) out.price = String(i.price);
+              if (i.description) out.description = String(i.description);
+              if (i.badge) out.badge = String(i.badge);
+              if (i.image_url) out.image = driveImageUrl_(String(i.image_url));
+              return out;
+            });
+          var out = { id: String(s.id), title: String(s.title || ""), items: items };
+          if (s.subtitle) out.subtitle = String(s.subtitle);
+          if (s.note) out.note = String(s.note);
+          return out;
+        });
+      var out = {
+        id: String(c.id),
+        title: String(c.title || ""),
+        tagline: String(c.tagline || ""),
+        icon: String(c.icon || "flame"),
+        sections: sections
+      };
+      if (c.note) out.note = String(c.note);
+      return out;
+    });
+
+  var result = {
+    ok: true,
+    kind: menuKind,
+    data: categories,
+    generatedAt: new Date().toISOString()
+  };
+  try { cache.put(cacheKey, JSON.stringify(result), 300); } catch (e) {}
+  return result;
+}
+
+// Helper: lee una hoja como array de objetos usando primera fila como headers
+function readSheet_(ss, name) {
+  var sh = ss.getSheetByName(name);
+  if (!sh) return [];
+  var rows = sh.getDataRange().getValues();
+  if (rows.length < 2) return [];
+  var headers = rows[0].map(function (h) { return String(h).trim(); });
+  return rows.slice(1)
+    .filter(function (r) {
+      return r.some(function (v) { return v !== "" && v !== null; });
+    })
+    .map(function (r) {
+      var o = {};
+      headers.forEach(function (h, i) { o[h] = r[i]; });
+      return o;
+    });
+}
+
+// Helper: convierte cualquier valor a boolean (TRUE/FALSE, 1/0, etc.)
+function truthy_(v) {
+  if (v === true) return true;
+  if (v === false) return false;
+  if (v === "" || v === null || v === undefined) return true; // default: visible
+  var s = String(v).toLowerCase().trim();
+  if (s === "false" || s === "0" || s === "no") return false;
+  return true;
+}
+
+// Helper: convierte cualquier URL de Drive al formato thumbnail (embed-friendly)
+function driveImageUrl_(url) {
+  if (!url) return "";
+  var u = String(url).trim();
+  // /file/d/{ID}/...
+  var m = u.match(/\/file\/d\/([^\/?\s]+)/);
+  if (m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w800";
+  // ?id={ID} o &id={ID}
+  m = u.match(/[?&]id=([^&\s]+)/);
+  if (m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w800";
+  // ID directo (25+ chars)
+  if (/^[-\w]{25,}$/.test(u)) return "https://drive.google.com/thumbnail?id=" + u + "&sz=w800";
+  // No es Drive: pasa tal cual (Cloudinary, etc.)
+  return u;
+}
+
+// Invalida cache manualmente (útil tras editar el Sheet y querer ver cambios ya)
+function invalidarCacheMenu() {
+  var cache = CacheService.getScriptCache();
+  cache.remove("menu:regular");
+  cache.remove("menu:tradicional");
+  try {
+    SpreadsheetApp.getUi().alert("Cache de menú limpiada. El próximo fetch leerá datos frescos del Sheet.");
+  } catch (e) {}
+}
+
+// =============================================================
+//  MIGRACION INICIAL (one-shot)
+//  Ejecutar UNA vez desde el editor de Apps Script.
+//  Pre-popula las 3 hojas con los datos actuales del menú.
+// =============================================================
+
+function migrarMenuActual() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var catSh = ensureSheet_(ss, SHEETS.MENU_CAT,
+    ["menu_kind", "id", "title", "tagline", "icon", "note", "order", "active"]);
+  var secSh = ensureSheet_(ss, SHEETS.MENU_SEC,
+    ["category_id", "id", "title", "subtitle", "note", "order", "active"]);
+  var itmSh = ensureSheet_(ss, SHEETS.MENU_ITM,
+    ["section_id", "name", "price", "description", "badge", "image_url", "order", "active"]);
+
+  // Limpia datos previos (preserva headers)
+  if (catSh.getLastRow() > 1) catSh.getRange(2, 1, catSh.getLastRow() - 1, catSh.getLastColumn()).clearContent();
+  if (secSh.getLastRow() > 1) secSh.getRange(2, 1, secSh.getLastRow() - 1, secSh.getLastColumn()).clearContent();
+  if (itmSh.getLastRow() > 1) itmSh.getRange(2, 1, itmSh.getLastRow() - 1, itmSh.getLastColumn()).clearContent();
+
+  var data = MENU_SEED_DATA_();
+
+  data.forEach(function (cat, ci) {
+    catSh.appendRow([
+      cat.menu_kind, cat.id, cat.title, cat.tagline, cat.icon || "flame",
+      cat.note || "", ci + 1, true
+    ]);
+    (cat.sections || []).forEach(function (sec, si) {
+      secSh.appendRow([
+        cat.id, sec.id, sec.title, sec.subtitle || "", sec.note || "", si + 1, true
+      ]);
+      (sec.items || []).forEach(function (it, ii) {
+        itmSh.appendRow([
+          sec.id, it.name, it.price || "", it.description || "", it.badge || "",
+          it.image || "", ii + 1, true
+        ]);
+      });
+    });
+  });
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "Migración completada.\n\n" +
+      "Hojas creadas/actualizadas:\n" +
+      "  • Menu_Categorias\n  • Menu_Secciones\n  • Menu_Items\n\n" +
+      "Ahora:\n" +
+      "1. Edita los items directamente en las hojas\n" +
+      "2. Ejecuta invalidarCacheMenu() o espera 5 min\n" +
+      "3. Recarga el sitio (Ctrl+Shift+R)"
+    );
+  } catch (e) {}
+}
+
+// Datos del menú actual (snapshot del PDF 2026, ambos menús)
+function MENU_SEED_DATA_() {
+  return [
+    // ===== MENU REGULAR (tarde) =====
+    {
+      menu_kind: "regular", id: "entradas", title: "Entradas",
+      tagline: "El comienzo perfecto", icon: "flame",
+      sections: [
+        {
+          id: "entradas-individuales", title: "Entradas",
+          items: [
+            { name: "Madurito asado con queso y salprieta", price: "3.00" },
+            { name: "Morcilla criolla a la parrilla", price: "3.50" },
+            { name: "Chorizo Corte Piedra", price: "3.50" },
+            { name: "Longaniza criolla a la parrilla", price: "5.00" },
+            { name: "Empanaditas de viento", price: "3.00" }
+          ]
+        },
+        {
+          id: "entradas-compartir", title: "Para Compartir",
+          items: [
+            { name: "Tuétano con camarón y pan de ajo", price: "8.00", badge: "Signature" },
+            { name: "Nachos con lomo fino de res", price: "9.00" },
+            { name: "Nachos con pollo", price: "9.00" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "regular", id: "cortes", title: "Cortes",
+      tagline: "Res Brangus · Cerdo Yorkshire Canadiense", icon: "beef",
+      note: "Incluyen: ensalada fresca, vegetales salteados y salsas. Puede seleccionar 2 opciones de guarnición.",
+      sections: [
+        {
+          id: "cerdo", title: "Cerdo Yorkshire Canadiense",
+          items: [
+            { name: "Costilla ahumada", price: "18.00" },
+            { name: "Baby ribs", price: "16.00" },
+            { name: "Bondiola", price: "16.00" },
+            { name: "Cow-boy", price: "16.00" },
+            { name: "Matambre", price: "16.00" },
+            { name: "Matambre pizza", price: "18.00" },
+            { name: "Chistorra pizza", price: "16.00" }
+          ]
+        },
+        {
+          id: "res", title: "Res Brangus",
+          items: [
+            { name: "Porter house", price: "20.00" },
+            { name: "Picaña", price: "18.00" },
+            { name: "Rib-eye", price: "16.00" },
+            { name: "Tomahawk", price: "20.00", badge: "Chef's Choice" },
+            { name: "New York", price: "17.00" },
+            { name: "Colita de cuadril", price: "18.00" },
+            { name: "Biffe chorizo", price: "18.00" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "regular", id: "grill", title: "Grill & Lomo Fino",
+      tagline: "Clásicos a la parrilla", icon: "chef-hat",
+      sections: [
+        {
+          id: "lomo-fino", title: "Lomo Fino de Res",
+          items: [
+            { name: "Lomo en salsa de chimichurri", price: "13.50" },
+            { name: "Lomo en salsa de vino tinto", price: "15.00" },
+            { name: "Lomo en salsa de tocino", price: "15.00" },
+            { name: "Lomo en salsa de camarón", price: "16.00" },
+            { name: "Filet mignon en salsa de champiñones", price: "15.00" }
+          ]
+        },
+        {
+          id: "grill-simple", title: "Grill",
+          items: [
+            { name: "Pollo", price: "7.50" },
+            { name: "Panceta", price: "7.50" },
+            { name: "Chuleta", price: "8.00" }
+          ]
+        },
+        {
+          id: "picaditas", title: "Picaditas",
+          items: [
+            { name: "Picadita Corte Piedra", price: "16.00",
+              description: "Pollo, chuleta, panceta, chorizo, morcilla, longaniza, choclo en salsa de queso, madurito asado, ensalada fresca y salsas." },
+            { name: "Picadita Corte Piedra Mixta", price: "24.00", badge: "Premium",
+              description: "Pollo, chuleta, panceta, chorizo, morcilla, longaniza, choclo en salsa de queso, madurito asado, chicharrón de camarón, chicharrón de pescado, ensalada fresca y salsas." }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "regular", id: "alitas-burgers", title: "Alitas, Burgers & Pizza",
+      tagline: "Street style elevado", icon: "pizza",
+      sections: [
+        {
+          id: "alitas", title: "Alitas y Pop-Corn",
+          note: "Salsas: Maracuyá · Búfalo · BBQ · Honey Mustard",
+          items: [
+            { name: "6 alitas", price: "6.00" },
+            { name: "12 alitas", price: "11.00" },
+            { name: "18 alitas", price: "16.00" },
+            { name: "24 alitas", price: "20.00" },
+            { name: "Pop-corn de pollo", price: "6.00" }
+          ]
+        },
+        {
+          id: "hamburguesas", title: "Hamburguesas",
+          items: [
+            { name: "Hamburguesa Americana", price: "6.00",
+              description: "150 gr de lomo fino, pan de papa, queso cheddar, tocino, cebolla caramelizada, vegetales, papas crujientes y salsas." },
+            { name: "Hamburguesa Corte Piedra", price: "9.00", badge: "Signature",
+              description: "300 gr de lomo fino, pan de papa, queso cheddar y mozzarella, tocino, chorizo, vegetales, cebolla caramelizada, papas crujientes y salsas." }
+          ]
+        },
+        {
+          id: "pizza", title: "Pizza Artesanal",
+          items: [
+            { name: "Pizza de embutidos", price: "8.00",
+              description: "Masa artesanal, salsa especial con cebolla caramelizada, mozzarella, parmesano, jamón, peperoni y albahaca." },
+            { name: "Pizza con bolognesa", price: "10.00",
+              description: "Masa artesanal, salsa especial con cebolla caramelizada, mozzarella, parmesano, bolognesa, peperoni y albahaca." }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "regular", id: "mariscos", title: "Mariscos",
+      tagline: "Del mar a la mesa", icon: "fish",
+      sections: [
+        {
+          id: "ceviches", title: "Ceviches",
+          items: [
+            { name: "Ceviche peruano", price: "7.50" },
+            { name: "Ceviche de camarón", price: "8.50" },
+            { name: "Ceviche mixto", price: "10.00" }
+          ]
+        },
+        {
+          id: "chicharrones", title: "Chicharrones",
+          items: [
+            { name: "Chicharrón mixto", price: "12.00" },
+            { name: "Chicharrón de camarón", price: "10.00" },
+            { name: "Chicharrón de pescado", price: "8.00" }
+          ]
+        },
+        {
+          id: "arroces", title: "Arroces",
+          items: [
+            { name: "Arroz con camarón", price: "9.00" },
+            { name: "Arroz marinero", price: "12.00" }
+          ]
+        },
+        {
+          id: "mariscos-especiales", title: "Especiales",
+          items: [
+            { name: "Corvina en salsa de camarón", price: "13.50",
+              description: "Acompañado de papitas chauchas salteadas, vegetales salteados, ensalada fresca y arroz (opcional)." },
+            { name: "Salmón en salsa de naranja", price: "15.00",
+              description: "Acompañado de papitas chauchas salteadas, vegetales salteados, ensalada fresca y arroz (opcional)." },
+            { name: "Carrusel de mariscos", price: "24.00", badge: "Para compartir",
+              description: "Ceviche peruano, arroz marinero, chicharrón de pescado, chicharrón de camarón, patacones y salsas." }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "regular", id: "bebidas", title: "Bebidas",
+      tagline: "Refrescantes y caseras", icon: "cup",
+      sections: [
+        {
+          id: "calientes", title: "Calientes",
+          items: [
+            { name: "Café filtrado", price: "1.00" },
+            { name: "Capuchino", price: "3.00" },
+            { name: "Chocolate natural", price: "2.00" },
+            { name: "Chocolate suizo", price: "3.00" },
+            { name: "Horchata", price: "1.00" },
+            { name: "Menta", price: "1.00" },
+            { name: "Manzanilla", price: "1.00" },
+            { name: "Cedrón", price: "1.00" },
+            { name: "Hierba luisa", price: "1.00" },
+            { name: "Manzana y canela", price: "1.00" }
+          ]
+        },
+        {
+          id: "jugos", title: "Jugos",
+          note: "Precios: vaso / jarra",
+          items: [
+            { name: "Maracuyá", price: "1.50 / 6.00" },
+            { name: "Chicha morada", price: "2.50 / 7.50" },
+            { name: "Piña", price: "1.50 / 6.00" },
+            { name: "Piña coco", price: "2.50 / 7.50" },
+            { name: "Mora", price: "1.50 / 6.00" },
+            { name: "Frutos rojos", price: "2.50 / 7.50" }
+          ]
+        },
+        {
+          id: "limonadas", title: "Limonadas",
+          items: [
+            { name: "Tradicional", price: "1.50" },
+            { name: "Imperial", price: "2.00" },
+            { name: "Coco", price: "2.50" },
+            { name: "Hierbabuena", price: "2.50" },
+            { name: "Rosa", price: "2.50" },
+            { name: "Frozen", price: "2.00" },
+            { name: "Sandía", price: "2.00" },
+            { name: "Frutos rojos", price: "2.00" }
+          ]
+        },
+        {
+          id: "gaseosas", title: "Gaseosas & Aguas",
+          items: [
+            { name: "Coca 300 ml", price: "1.00" },
+            { name: "Sprite 300 ml", price: "1.00" },
+            { name: "Fanta 300 ml", price: "1.00" },
+            { name: "Fiora 300 ml", price: "1.00" },
+            { name: "Gaseosa 1 lt", price: "2.00" },
+            { name: "Gaseosa 3 lt", price: "4.00" },
+            { name: "Fuze Tea 500 ml", price: "1.00" },
+            { name: "Fuze Tea 1 lt", price: "2.00" },
+            { name: "Agua mineral", price: "1.00" },
+            { name: "Agua", price: "1.00" }
+          ]
+        },
+        {
+          id: "milkshakes", title: "Milkshakes",
+          items: [
+            { name: "Oreo", price: "4.50" },
+            { name: "Nutella", price: "4.50" },
+            { name: "Vainilla", price: "4.50" },
+            { name: "Fresa", price: "4.50" },
+            { name: "Café", price: "4.50" },
+            { name: "Menta", price: "4.50" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "regular", id: "bar", title: "Bar",
+      tagline: "Cócteles, vinos y cervezas", icon: "wine",
+      sections: [
+        {
+          id: "cocteles", title: "Cócteles",
+          items: [
+            { name: "Mojito clásico", price: "5.00" },
+            { name: "Mojito frutos rojos", price: "6.00" },
+            { name: "Mojito maracuyá", price: "5.00" },
+            { name: "Margarita", price: "5.00" },
+            { name: "Blue margarita", price: "5.00" },
+            { name: "Passion fruit margarita", price: "6.00" },
+            { name: "Martini", price: "5.00" },
+            { name: "Padrino", price: "6.00" },
+            { name: "Tequila sunrise", price: "5.00" },
+            { name: "Laguna Azul", price: "4.50" },
+            { name: "Paloma", price: "5.00" },
+            { name: "Paloma sandía", price: "6.00" },
+            { name: "Mai tai", price: "6.00" },
+            { name: "Caipirinha", price: "4.00" },
+            { name: "Piña colada", price: "6.00" },
+            { name: "Saltamontes", price: "5.00" },
+            { name: "Pantera rosa", price: "5.00" },
+            { name: "Destornillador", price: "5.00" },
+            { name: "Negroni", price: "7.00" },
+            { name: "Orgasmo", price: "6.00" },
+            { name: "Moscu mule", price: "7.00" },
+            { name: "Gin tonic", price: "5.00" },
+            { name: "Gin tonic frutos rojos", price: "6.00" },
+            { name: "Gin bassil", price: "6.00" },
+            { name: "Caipiroska", price: "5.00" },
+            { name: "Caipiroska de piña", price: "6.00" }
+          ]
+        },
+        {
+          id: "cocteles-autor", title: "Cócteles de Autor",
+          items: [
+            { name: "¡Bien bestia!", price: "5.00" },
+            { name: "Corte Piedra", price: "7.50", badge: "Signature" },
+            { name: "Piladora", price: "6.00" },
+            { name: "Coco loco Piñas style", price: "7.00" },
+            { name: "¡Chuchaqui!", price: "6.00" }
+          ]
+        },
+        {
+          id: "cervezas", title: "Cerveza & Micheladas",
+          items: [
+            { name: "Club Platino", price: "2.00" },
+            { name: "Corona", price: "2.50" },
+            { name: "Heineken", price: "2.50" },
+            { name: "Modelo", price: "3.50" },
+            { name: "Michelada", price: "2.00" },
+            { name: "Michelada de maracuyá", price: "2.50" },
+            { name: "Chelada", price: "2.00" },
+            { name: "Chelada de maracuyá", price: "2.50" }
+          ]
+        },
+        {
+          id: "vinos", title: "Vinos",
+          items: [
+            { name: "Catador", price: "4.00" },
+            { name: "Copa Casillero Cabernet", price: "6.50" },
+            { name: "Copa Casillero Merlot", price: "6.50" },
+            { name: "Copa de sangría", price: "4.50" },
+            { name: "Copa vino hervido", price: "4.50" },
+            { name: "Jarra de sangría", price: "16.00" },
+            { name: "Botella vino hervido", price: "18.00" },
+            { name: "Casillero Merlot", price: "26.00" },
+            { name: "Casillero Cabernet", price: "26.00" }
+          ]
+        }
+      ]
+    },
+
+    // ===== MENU TRADICIONAL (mañana) =====
+    {
+      menu_kind: "tradicional", id: "entradas-trad-cat", title: "Entradas",
+      tagline: "Para abrir el apetito", icon: "flame",
+      sections: [
+        {
+          id: "entradas-trad", title: "Entradas",
+          items: [
+            { name: "Morcilla criolla a la parrilla", price: "3.50" },
+            { name: "Chorizo Corte Piedra", price: "3.50" },
+            { name: "Longaniza criolla a la parrilla", price: "5.00" },
+            { name: "Empanaditas de viento", price: "3.00" },
+            { name: "Madurito asado con queso y salprieta", price: "3.00" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "tradicional", id: "tigrillos", title: "Tigrillos, Bolones & Molloco",
+      tagline: "Sabores auténticos de nuestra tierra Piñas", icon: "flame",
+      sections: [
+        {
+          id: "tigrillos-bolones", title: "Tigrillos · Bolones · Molloco",
+          note: "Elige entre plátano verde o pintón.",
+          items: [
+            { name: "Tigrillo", price: "3.50", badge: "Típico" },
+            { name: "Tigrillo mixto", price: "5.50", badge: "Más pedido", description: "Tigrillo con varios acompañantes." },
+            { name: "Bolón con queso", price: "3.00" },
+            { name: "Bolón con chicharrón", price: "4.00" },
+            { name: "Bolón mixto", price: "4.00" },
+            { name: "Molloco", price: "3.00" }
+          ]
+        },
+        {
+          id: "acompanantes", title: "Acompañantes",
+          note: "Añade lo que quieras a tu tigrillo, bolón o molloco.",
+          items: [
+            { name: "Carne seca con huevo", price: "3.00" },
+            { name: "Longaniza", price: "3.50" },
+            { name: "Morcilla", price: "3.00" },
+            { name: "Pollo al grill", price: "3.00" },
+            { name: "Panceta al grill", price: "3.00" },
+            { name: "Queso", price: "1.00" },
+            { name: "Huevo", price: "1.00" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "tradicional", id: "tradicionales", title: "Tradicionales",
+      tagline: "Del fuego directo a tu mesa", icon: "beef",
+      sections: [
+        {
+          id: "tradicionales-main", title: "Tradicionales",
+          items: [
+            { name: "Lomo fino al grill", price: "7.00", description: "Lomo fino en parrilla con acompañantes." },
+            { name: "Picaña al grill", price: "8.00", badge: "Recomendado", description: "Corte de picaña a la parrilla." },
+            { name: "Bistec de lomo fino", price: "8.50", description: "Bistec jugoso al grill." }
+          ]
+        },
+        {
+          id: "especiales-trad", title: "Especiales",
+          note: "Todos con salsa de camarón casera.",
+          items: [
+            { name: "Bistec de camarón (clásico)", price: "7.50", badge: "Signature", description: "Bistec de lomo fino en salsa de camarón." },
+            { name: "Bistec de camarón (deluxe)", price: "7.50", description: "Con salsa de camarón reducida y papas chauchas." },
+            { name: "Bistec de camarón (express)", price: "7.00", description: "Porción clásica en salsa de camarón." }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "tradicional", id: "mariscos-trad-cat", title: "Mariscos",
+      tagline: "Del mar a la mesa", icon: "fish",
+      sections: [
+        {
+          id: "ceviches-trad", title: "Ceviches",
+          items: [
+            { name: "Ceviche peruano", price: "7.50" },
+            { name: "Ceviche de camarón", price: "8.50" },
+            { name: "Ceviche mixto", price: "10.00" }
+          ]
+        },
+        {
+          id: "chicharrones-trad", title: "Chicharrones",
+          items: [
+            { name: "Chicharrón mixto", price: "12.00" },
+            { name: "Chicharrón de camarón", price: "10.00" },
+            { name: "Chicharrón de pescado", price: "8.00" }
+          ]
+        },
+        {
+          id: "arroces-trad", title: "Arroces",
+          items: [
+            { name: "Arroz con camarón", price: "9.00" },
+            { name: "Arroz marinero", price: "12.00" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "tradicional", id: "alitas-trad", title: "Alitas & Pop-Corn",
+      tagline: "Para picar mientras esperas", icon: "pizza",
+      sections: [
+        {
+          id: "alitas-trad-s", title: "Alitas y Pop-Corn",
+          note: "Salsas: Maracuyá · Búfalo · BBQ · Honey Mustard",
+          items: [
+            { name: "6 alitas", price: "6.00" },
+            { name: "12 alitas", price: "11.00" },
+            { name: "18 alitas", price: "16.00" },
+            { name: "24 alitas", price: "20.00" },
+            { name: "Pop-corn de pollo", price: "6.00" }
+          ]
+        }
+      ]
+    },
+    {
+      menu_kind: "tradicional", id: "bebidas-trad", title: "Bebidas",
+      tagline: "Frescas y caseras", icon: "cup",
+      sections: [
+        {
+          id: "calientes-trad", title: "Calientes",
+          items: [
+            { name: "Café filtrado", price: "1.00" },
+            { name: "Chocolate natural", price: "2.00" },
+            { name: "Chocolate suizo", price: "3.00" },
+            { name: "Horchata", price: "1.00" },
+            { name: "Menta", price: "1.00" },
+            { name: "Manzanilla", price: "1.00" },
+            { name: "Cedrón", price: "1.00" },
+            { name: "Hierba luisa", price: "1.00" },
+            { name: "Manzana y canela", price: "1.00" }
+          ]
+        },
+        {
+          id: "jugos-trad", title: "Jugos",
+          note: "Precios: vaso / jarra",
+          items: [
+            { name: "Maracuyá", price: "1.50 / 2.50" },
+            { name: "Chicha morada", price: "1.50 / 2.50" },
+            { name: "Piña", price: "1.50 / 2.50" },
+            { name: "Piña coco", price: "2.00" },
+            { name: "Mora", price: "1.50 / 2.50" },
+            { name: "Maracumora", price: "2.00" }
+          ]
+        },
+        {
+          id: "limonadas-trad", title: "Limonadas",
+          items: [
+            { name: "Tradicional", price: "1.50" },
+            { name: "Imperial", price: "2.00" },
+            { name: "Coco", price: "2.50" },
+            { name: "Hierbabuena", price: "2.50" },
+            { name: "Rosa", price: "2.50" },
+            { name: "Frozen", price: "2.00" }
+          ]
+        },
+        {
+          id: "batidos-trad", title: "Batidos",
+          items: [
+            { name: "Piña", price: "2.00" },
+            { name: "Fresa", price: "2.00" },
+            { name: "Melón", price: "2.00" },
+            { name: "Mora", price: "2.00" }
+          ]
+        },
+        {
+          id: "gaseosas-trad", title: "Gaseosas & Aguas",
+          items: [
+            { name: "Coca 300 ml", price: "1.00" },
+            { name: "Sprite 300 ml", price: "1.00" },
+            { name: "Fanta 300 ml", price: "1.00" },
+            { name: "Fiora 300 ml", price: "1.00" },
+            { name: "Gaseosa 1 lt", price: "2.00" },
+            { name: "Gaseosa 3 lt", price: "4.00" },
+            { name: "Fuze Tea 500 ml", price: "1.00" },
+            { name: "Fuze Tea 1 lt", price: "2.00" },
+            { name: "Agua", price: "1.00" }
+          ]
+        }
+      ]
+    }
+  ];
 }
 
 // =============================================================
