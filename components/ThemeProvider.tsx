@@ -5,6 +5,8 @@ import type { MenuKind } from "@/lib/menu-schedule";
 import { getMenuKindByHour } from "@/lib/menu-schedule";
 import type { MenuCategory } from "@/lib/menu-data";
 import { fetchMenu, refreshMenu } from "@/lib/menu-api";
+import type { EventsPayload } from "@/lib/events-api";
+import { fetchEvents, refreshEvents } from "@/lib/events-api";
 
 type LiveMenus = {
   regular: MenuCategory[] | null;
@@ -18,6 +20,8 @@ type ThemeCtx = {
   currentKind: MenuKind; // el vigente por horario
   liveMenus: LiveMenus;
   refreshMenus: () => Promise<void>;
+  liveEvents: EventsPayload | null;
+  refreshEvents: () => Promise<void>;
 };
 
 const Ctx = createContext<ThemeCtx>({
@@ -27,6 +31,8 @@ const Ctx = createContext<ThemeCtx>({
   currentKind: "regular",
   liveMenus: { regular: null, tradicional: null },
   refreshMenus: async () => {},
+  liveEvents: null,
+  refreshEvents: async () => {},
 });
 
 export function useTheme() {
@@ -52,6 +58,7 @@ export default function ThemeProvider({
     regular: null,
     tradicional: null,
   });
+  const [liveEvents, setLiveEvents] = useState<EventsPayload | null>(null);
 
   // Detectar hora actual cada minuto
   useEffect(() => {
@@ -75,16 +82,18 @@ export default function ThemeProvider({
     }
   }, [menuKind]);
 
-  // Cargar menús live (Sheets) — al montar y cada 30 min
+  // Cargar menús + eventos live (Sheets) — al montar y cada 30 min
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [regular, tradicional] = await Promise.all([
+      const [regular, tradicional, events] = await Promise.all([
         fetchMenu("regular"),
         fetchMenu("tradicional"),
+        fetchEvents(),
       ]);
       if (cancelled) return;
       setLiveMenus({ regular, tradicional });
+      if (events) setLiveEvents(events);
     };
     void load();
     const id = setInterval(load, 30 * 60_000);
@@ -102,11 +111,25 @@ export default function ThemeProvider({
     setLiveMenus({ regular, tradicional });
   }, []);
 
+  const refreshEventsCb = useCallback(async () => {
+    const events = await refreshEvents();
+    if (events) setLiveEvents(events);
+  }, []);
+
   const theme = menuKind === "tradicional" ? "morning" : "evening";
 
   return (
     <Ctx.Provider
-      value={{ theme, menuKind, setMenuKind, currentKind, liveMenus, refreshMenus }}
+      value={{
+        theme,
+        menuKind,
+        setMenuKind,
+        currentKind,
+        liveMenus,
+        refreshMenus,
+        liveEvents,
+        refreshEvents: refreshEventsCb,
+      }}
     >
       {children}
     </Ctx.Provider>

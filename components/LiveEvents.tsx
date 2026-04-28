@@ -12,8 +12,17 @@ import {
   Flame,
 } from "lucide-react";
 import { CONFIG, waGeneralLink } from "@/lib/config";
+import { useTheme } from "@/components/ThemeProvider";
+import type { LiveEvent, Promo } from "@/lib/events-api";
 
 const ICONS = { mic: Mic, music: Music, "chef-hat": ChefHat, flame: Flame };
+
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 const DAY_LETTERS = ["D", "L", "M", "M", "J", "V", "S"];
 const DAY_NAMES = [
   "Domingo",
@@ -39,8 +48,8 @@ const MONTHS = [
   "Diciembre",
 ];
 
-type EventDef = (typeof CONFIG.liveEvents)[number];
-type PromoDef = (typeof CONFIG.promosByDay)[number];
+type EventDef = LiveEvent;
+type PromoDef = Promo | null;
 
 function sameDay(a: Date, b: Date) {
   return (
@@ -70,6 +79,11 @@ export default function LiveEvents() {
     month: new Date().getMonth(),
   });
   const [selected, setSelected] = useState<Date | null>(null);
+  const { liveEvents } = useTheme();
+
+  // Datos live (Sheets) o fallback a CONFIG estático
+  const eventsList: EventDef[] = liveEvents?.liveEvents ?? (CONFIG.liveEvents as EventDef[]);
+  const promosList: PromoDef[] = liveEvents?.promosByDay ?? (CONFIG.promosByDay as PromoDef[]);
 
   useEffect(() => {
     const now = new Date();
@@ -83,11 +97,17 @@ export default function LiveEvents() {
     [viewMonth],
   );
 
-  const eventsForDay = (date: Date): EventDef[] =>
-    CONFIG.liveEvents.filter((e) => e.day === date.getDay());
+  const eventsForDay = (date: Date): EventDef[] => {
+    const dateIso = isoDate(date);
+    return eventsList.filter((e) => {
+      // Eventos con fecha específica solo aplican a ese día exacto
+      if (e.specificDate) return e.specificDate === dateIso;
+      // Recurrentes aplican a su día de semana
+      return e.day === date.getDay();
+    });
+  };
 
-  const promoForDay = (date: Date): PromoDef =>
-    CONFIG.promosByDay[date.getDay()];
+  const promoForDay = (date: Date): PromoDef => promosList[date.getDay()] ?? null;
 
   const isToday = (d: Date | null) => d && today && sameDay(d, today);
   const isSelected = (d: Date | null) => d && selected && sameDay(d, selected);
@@ -229,18 +249,20 @@ export default function LiveEvents() {
 
             {/* Legend */}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3 border-t border-white/10 pt-4">
-              {CONFIG.liveEvents.map((e) => (
-                <span
-                  key={e.title}
-                  className="flex items-center gap-1.5 text-[10px] text-white/60"
-                >
+              {eventsList
+                .filter((e) => !e.specificDate) // solo recurrentes en la leyenda
+                .map((e) => (
                   <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: e.color }}
-                  />
-                  {e.title.replace(/^(Viernes de |Jueves )/, "")}
-                </span>
-              ))}
+                    key={e.title}
+                    className="flex items-center gap-1.5 text-[10px] text-white/60"
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: e.color }}
+                    />
+                    {e.title.replace(/^(Viernes de |Jueves )/, "")}
+                  </span>
+                ))}
             </div>
           </motion.div>
 

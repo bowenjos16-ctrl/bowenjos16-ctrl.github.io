@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Clock, Flame } from "lucide-react";
 import Image from "next/image";
 import { CONFIG } from "@/lib/config";
+import { useTheme } from "@/components/ThemeProvider";
 
 function useCountdown(targetHour: number) {
   const [time, setTime] = useState({ h: 0, m: 0, s: 0 });
@@ -34,9 +35,11 @@ function useCountdown(targetHour: number) {
 }
 
 export default function PromoBanner() {
-  // getDay() devuelve 0=Domingo ... 6=Sábado, igual que el array CONFIG.promosByDay
+  const { liveEvents } = useTheme();
+  // getDay() devuelve 0=Domingo ... 6=Sábado
   const today = new Date().getDay();
-  const p = CONFIG.promosByDay[today];
+  const promosArr = liveEvents?.promosByDay ?? CONFIG.promosByDay;
+  const p = promosArr[today];
   const timer = useCountdown(23); // Termina a medianoche
 
   // Martes (2) o cualquier día sin promo → no renderizar

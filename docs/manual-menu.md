@@ -158,6 +158,97 @@ Sí. La app de Google Sheets en iOS/Android funciona perfectamente. Para subir f
 
 ---
 
+---
+
+# Eventos y Promos del Día
+
+Además del menú, también puedes editar la sección **Eventos** del sitio (calendario con karaoke, DJ, gastronómico, etc.) y las **promos** que aparecen en el banner según el día de la semana.
+
+## Hojas
+
+- **`Eventos`** — eventos en vivo (recurrentes o de fecha específica)
+- **`Promos`** — promo destacada por día de la semana
+
+---
+
+## Eventos: dos tipos
+
+### Tipo 1: Recurrente (todos los X de cada semana)
+
+Ejemplo: "Viernes de Karaoke" todos los viernes.
+
+| Columna | Valor |
+|---|---|
+| `tipo` | `recurrente` |
+| `dia_semana` | `5` (0=Dom, 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb) |
+| `fecha` | _vacío_ |
+| `titulo` | `Viernes de Karaoke` |
+| `subtitulo` | `Abre tus cuerdas vocales con un cóctel en mano` |
+| `hora_inicio` | `20` |
+| `hora_fin` | `24` |
+| `icon` | `mic` (mic, music, chef-hat, flame) |
+| `color` | `#c73838` (color hex) |
+| `active` | `TRUE` |
+
+### Tipo 2: Fecha específica (un evento puntual)
+
+Ejemplo: concierto el 15 de mayo de 2026.
+
+| Columna | Valor |
+|---|---|
+| `tipo` | `fecha` |
+| `dia_semana` | _vacío_ |
+| `fecha` | `2026-05-15` (formato `YYYY-MM-DD`) |
+| `titulo` | `Concierto especial` |
+| `subtitulo` | `Música en vivo con banda invitada` |
+| `hora_inicio` | `21` |
+| `hora_fin` | `2` |
+| `icon` | `music` |
+| `color` | `#c9a35a` |
+| `active` | `TRUE` |
+
+---
+
+## Iconos disponibles para eventos
+
+| Icon | Uso típico |
+|---|---|
+| `mic` | Karaoke, micrófono abierto |
+| `music` | DJ, banda en vivo |
+| `chef-hat` | Eventos gastronómicos del chef |
+| `flame` | Promo destacada |
+
+---
+
+## Promos por día
+
+Una fila por día. Se muestra como banner cuando estás en el menú regular ese día.
+
+| Columna | Ejemplo combo | Ejemplo descuento |
+|---|---|---|
+| `dia_semana` | `1` (Lunes) | `0` (Domingo) |
+| `titulo` | `Lunes de Grilles` | `Domingo de mariscos` |
+| `descripcion` | `Lleva 2 platos de Grilles...` | `10% de descuento en todos los mariscos` |
+| `tipo_oferta` | `combo` | `discount` |
+| `cantidad` | `2` | _vacío_ |
+| `precio_unidad` | `12.50` | _vacío_ |
+| `descuento_pct` | _vacío_ | `10` |
+| `subtitulo` | `en Grilles` | `en mariscos` |
+| `imagen` | `/dishes/grill-hero.webp` | `/dishes/ceviche.webp` |
+| `active` | `TRUE` | `TRUE` |
+
+> **Día cerrado** (ej: Martes): pon `active=FALSE` o no incluyas la fila para ese día.
+
+---
+
+## Cambios visibles
+
+- **5 minutos máximo** (cache cliente)
+- **Inmediato** con `Cmd+Shift+R` en el navegador
+- Si tienes el trigger automático instalado (`instalarTriggerMenu`), el cache servidor se limpia al editar el Sheet
+
+---
+
 ## ¿Algo no funciona?
 
 Contacta a soporte técnico (Bryan) con:

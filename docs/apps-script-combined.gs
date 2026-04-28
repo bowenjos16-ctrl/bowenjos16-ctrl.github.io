@@ -40,7 +40,9 @@ var SHEETS = {
   REW: "Recompensas",
   MENU_CAT: "Menu_Categorias",
   MENU_SEC: "Menu_Secciones",
-  MENU_ITM: "Menu_Items"
+  MENU_ITM: "Menu_Items",
+  EVENTOS: "Eventos",
+  PROMOS: "Promos"
 };
 
 // Recompensas por defecto - se crean en setup() si la hoja esta vacia
@@ -252,6 +254,10 @@ function doGet(e) {
     var nocache = e.parameter.nocache === "1" || e.parameter.nocache === "true";
     return json_(getMenu_((e.parameter.kind || "regular"), { nocache: nocache }));
   }
+  if (action === "getEvents") {
+    var nocache2 = e.parameter.nocache === "1" || e.parameter.nocache === "true";
+    return json_(getEvents_({ nocache: nocache2 }));
+  }
   return ContentService
     .createTextOutput("Corte Piedra API")
     .setMimeType(ContentService.MimeType.TEXT);
@@ -277,6 +283,7 @@ function doPost(e) {
       case "getHistory": return json_(getHistory_(data));
       case "awardInstagramBonus": return json_(withLock_(function () { return awardInstagramBonus_(data); }));
       case "getMenu":    return json_(getMenu_(data.kind || "regular"));
+      case "getEvents":  return json_(getEvents_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
@@ -1034,15 +1041,18 @@ function invalidarCacheMenu() {
 function onEditMenu_(e) {
   if (!e || !e.range) return;
   var sheetName = e.range.getSheet().getName();
-  if (sheetName === SHEETS.MENU_CAT ||
-      sheetName === SHEETS.MENU_SEC ||
-      sheetName === SHEETS.MENU_ITM) {
-    try {
-      var cache = CacheService.getScriptCache();
+  try {
+    var cache = CacheService.getScriptCache();
+    if (sheetName === SHEETS.MENU_CAT ||
+        sheetName === SHEETS.MENU_SEC ||
+        sheetName === SHEETS.MENU_ITM) {
       cache.remove("menu:regular");
       cache.remove("menu:tradicional");
-    } catch (err) {}
-  }
+    }
+    if (sheetName === SHEETS.EVENTOS || sheetName === SHEETS.PROMOS) {
+      cache.remove("events");
+    }
+  } catch (err) {}
 }
 
 /**
@@ -1654,6 +1664,235 @@ function MENU_SEED_DATA_() {
       ]
     }
   ];
+}
+
+// =============================================================
+//  EVENTOS Y PROMOS (2 hojas: Eventos, Promos)
+// =============================================================
+//
+// Endpoint:  GET ?action=getEvents (&nocache=1 opcional)
+// Retorna:   { ok, liveEvents: [...], promosByDay: [7 items o null], generatedAt }
+//
+// Hojas:
+//   Eventos: id | tipo | dia_semana | fecha | titulo | subtitulo | hora_inicio | hora_fin | icon | color | active
+//     - tipo "recurrente": llenar dia_semana (0=Dom .. 6=Sab); fecha vacío
+//     - tipo "fecha": llenar fecha (YYYY-MM-DD); dia_semana vacío
+//   Promos:  dia_semana | titulo | descripcion | tipo_oferta | cantidad | precio_unidad | descuento_pct | subtitulo | imagen | active
+//     - una fila por día (0-6); marca active=FALSE para ocultar (ej: Martes cerrado)
+
+function getEvents_(opts) {
+  opts = opts || {};
+  var cache = CacheService.getScriptCache();
+  var cacheKey = "events";
+  if (!opts.nocache) {
+    try {
+      var cached = cache.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var eventos = readSheet_(ss, SHEETS.EVENTOS);
+  var promos = readSheet_(ss, SHEETS.PROMOS);
+
+  // Convertir eventos a formato { day, date?, title, subtitle, startHour, endHour, icon, color }
+  var liveEvents = eventos
+    .filter(function (e) { return truthy_(e.active); })
+    .map(function (e) {
+      var tipo = String(e.tipo || "").toLowerCase().trim();
+      var out = {
+        title: String(e.titulo || ""),
+        subtitle: String(e.subtitulo || ""),
+        startHour: Number(e.hora_inicio || 0),
+        endHour: Number(e.hora_fin || 0),
+        icon: String(e.icon || "music"),
+        color: String(e.color || "#c73838")
+      };
+      if (tipo === "fecha") {
+        out.specificDate = formatDateISO_(e.fecha);
+        out.day = -1; // marcador: usar specificDate
+      } else {
+        out.day = parseDayOfWeek_(e.dia_semana);
+      }
+      return out;
+    })
+    .filter(function (e) {
+      // Eliminar entradas inválidas
+      if (e.specificDate) return !!e.specificDate;
+      return e.day >= 0 && e.day <= 6;
+    });
+
+  // Convertir promos a array indexado por día (0-6)
+  var promosByDay = [null, null, null, null, null, null, null];
+  promos.forEach(function (p) {
+    if (!truthy_(p.active)) return;
+    var d = parseDayOfWeek_(p.dia_semana);
+    if (d < 0 || d > 6) return;
+    var ofertaTipo = String(p.tipo_oferta || "").toLowerCase().trim();
+    var entry = {
+      title: String(p.titulo || ""),
+      description: String(p.descripcion || ""),
+      offerType: ofertaTipo === "discount" ? "discount" : "combo",
+      subtitle: String(p.subtitulo || ""),
+      bgImage: String(p.imagen || "")
+    };
+    if (entry.offerType === "combo") {
+      entry.qty = Number(p.cantidad || 0);
+      entry.pricePerItem = Number(p.precio_unidad || 0);
+    } else {
+      entry.discountPct = Number(p.descuento_pct || 0);
+    }
+    promosByDay[d] = entry;
+  });
+
+  var result = {
+    ok: true,
+    liveEvents: liveEvents,
+    promosByDay: promosByDay,
+    generatedAt: new Date().toISOString()
+  };
+  try { cache.put(cacheKey, JSON.stringify(result), 300); } catch (e) {}
+  return result;
+}
+
+// Helper: convierte número, nombre o cadena a número de día (0-6)
+function parseDayOfWeek_(v) {
+  if (v === "" || v === null || v === undefined) return -1;
+  // Si ya es número
+  var n = Number(v);
+  if (!isNaN(n) && isFinite(n) && n >= 0 && n <= 6) return n;
+  // Si es nombre
+  var s = String(v).toLowerCase().trim();
+  var DAYS = {
+    "domingo": 0, "dom": 0, "sunday": 0, "sun": 0,
+    "lunes": 1, "lun": 1, "monday": 1, "mon": 1,
+    "martes": 2, "mar": 2, "tuesday": 2, "tue": 2,
+    "miercoles": 3, "miércoles": 3, "mie": 3, "mié": 3, "wednesday": 3, "wed": 3,
+    "jueves": 4, "jue": 4, "thursday": 4, "thu": 4,
+    "viernes": 5, "vie": 5, "friday": 5, "fri": 5,
+    "sabado": 6, "sábado": 6, "sab": 6, "sáb": 6, "saturday": 6, "sat": 6
+  };
+  return DAYS[s] !== undefined ? DAYS[s] : -1;
+}
+
+// Helper: convierte cualquier formato de fecha a "YYYY-MM-DD" o vacío
+function formatDateISO_(v) {
+  if (!v) return "";
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  var s = String(v).trim();
+  // Si ya está en formato YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  // Intentar parsear
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  return "";
+}
+
+// =============================================================
+//  MIGRACION INICIAL EVENTOS (one-shot)
+// =============================================================
+
+function migrarEventosActuales() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var evSh = ensureSheet_(ss, SHEETS.EVENTOS,
+    ["id", "tipo", "dia_semana", "fecha", "titulo", "subtitulo", "hora_inicio", "hora_fin", "icon", "color", "active"]);
+  var prSh = ensureSheet_(ss, SHEETS.PROMOS,
+    ["dia_semana", "titulo", "descripcion", "tipo_oferta", "cantidad", "precio_unidad", "descuento_pct", "subtitulo", "imagen", "active"]);
+
+  // Protección: si las hojas ya tienen datos, pedir confirmación
+  var hasData = evSh.getLastRow() > 1 || prSh.getLastRow() > 1;
+  if (hasData) {
+    try {
+      var ui = SpreadsheetApp.getUi();
+      var resp = ui.alert(
+        "⚠️ Hojas de eventos ya contienen datos",
+        "Si continúas, se BORRARÁN los eventos y promos editados manualmente.\n\n¿Continuar?",
+        ui.ButtonSet.YES_NO
+      );
+      if (resp !== ui.Button.YES) {
+        ui.alert("Migración cancelada.");
+        return;
+      }
+    } catch (e) {
+      throw new Error("Las hojas ya tienen datos. Confirma desde el editor.");
+    }
+  }
+
+  // Limpia datos previos
+  if (evSh.getLastRow() > 1) evSh.getRange(2, 1, evSh.getLastRow() - 1, evSh.getLastColumn()).clearContent();
+  if (prSh.getLastRow() > 1) prSh.getRange(2, 1, prSh.getLastRow() - 1, prSh.getLastColumn()).clearContent();
+
+  // Eventos recurrentes (semilla del sitio actual)
+  var eventos = [
+    { tipo: "recurrente", dia_semana: 5, titulo: "Viernes de Karaoke",
+      subtitulo: "Abre tus cuerdas vocales con un cóctel en mano",
+      hora_inicio: 20, hora_fin: 24, icon: "mic", color: "#c73838" },
+    { tipo: "recurrente", dia_semana: 6, titulo: "DJ en vivo",
+      subtitulo: "La mejor música para una noche de parrilla",
+      hora_inicio: 21, hora_fin: 2, icon: "music", color: "#c9a35a" },
+    { tipo: "recurrente", dia_semana: 4, titulo: "Jueves gastronómico",
+      subtitulo: "Maridajes especiales con el chef",
+      hora_inicio: 19, hora_fin: 23, icon: "chef-hat", color: "#8b2323" }
+  ];
+  eventos.forEach(function (e, i) {
+    evSh.appendRow([
+      "EV" + (i + 1).toString().padStart(3, "0"),
+      e.tipo, e.dia_semana, "", e.titulo, e.subtitulo,
+      e.hora_inicio, e.hora_fin, e.icon, e.color, true
+    ]);
+  });
+
+  // Promos por día (semilla del sitio actual)
+  var promos = [
+    { dia_semana: 0, titulo: "Domingo de mariscos",
+      descripcion: "10% de descuento en todos los mariscos del menú.",
+      tipo_oferta: "discount", cantidad: "", precio_unidad: "", descuento_pct: 10,
+      subtitulo: "en mariscos", imagen: "/dishes/ceviche.webp", active: true },
+    { dia_semana: 1, titulo: "Lunes de Grilles",
+      descripcion: "Lleva 2 platos de Grilles y aprovecha el especial del día.",
+      tipo_oferta: "combo", cantidad: 2, precio_unidad: 12.5, descuento_pct: "",
+      subtitulo: "en Grilles", imagen: "/dishes/grill-hero.webp", active: true },
+    // Martes: cerrado, no se incluye (active=FALSE no es lo mismo que ausente)
+    { dia_semana: 3, titulo: "Miércoles de Costillas",
+      descripcion: "2 platos de costillas premium a precio especial.",
+      tipo_oferta: "combo", cantidad: 2, precio_unidad: 30.0, descuento_pct: "",
+      subtitulo: "en Costillas", imagen: "/dishes/grill-hero.webp", active: true },
+    { dia_semana: 4, titulo: "Jueves de Ribeyes",
+      descripcion: "Doble corte Ribeye a precio especial.",
+      tipo_oferta: "combo", cantidad: 2, precio_unidad: 26.0, descuento_pct: "",
+      subtitulo: "en Ribeyes", imagen: "/dishes/grill-hero.webp", active: true },
+    { dia_semana: 5, titulo: "Viernes de Cócteles",
+      descripcion: "3 cócteles seleccionados a $10 c/u — perfecto para arrancar el finde.",
+      tipo_oferta: "combo", cantidad: 3, precio_unidad: 10.0, descuento_pct: "",
+      subtitulo: "en cócteles seleccionados", imagen: "/dishes/cocktails.webp", active: true },
+    { dia_semana: 6, titulo: "Sábado de Micheladas",
+      descripcion: "3 micheladas heladas por $5 c/u — refresca tu finde.",
+      tipo_oferta: "combo", cantidad: 3, precio_unidad: 5.0, descuento_pct: "",
+      subtitulo: "en Micheladas", imagen: "/dishes/micheladas.webp", active: true }
+  ];
+  promos.forEach(function (p) {
+    prSh.appendRow([
+      p.dia_semana, p.titulo, p.descripcion, p.tipo_oferta,
+      p.cantidad, p.precio_unidad, p.descuento_pct, p.subtitulo, p.imagen, p.active
+    ]);
+  });
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "Eventos migrados.\n\n" +
+      "Hojas creadas: Eventos, Promos\n\n" +
+      "Edita los items directamente. Para evento de FECHA específica:\n" +
+      "  - tipo = fecha\n" +
+      "  - dia_semana vacío\n" +
+      "  - fecha = 2026-05-15 (formato YYYY-MM-DD)\n\n" +
+      "Cambios visibles en ~5 min o inmediato con Cmd+Shift+R."
+    );
+  } catch (e) {}
 }
 
 // =============================================================
