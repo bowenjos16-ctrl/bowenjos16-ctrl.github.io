@@ -80,10 +80,11 @@ export const CONFIG = {
   // Apps Script Web App URL (para ratings)
   ratingEndpoint:
     "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
-  // GitHub Pages no soporta API routes server-side. loyaltyApi vacío activa modo demo
-  // (cualquier OTP de 6 dígitos sirve, datos en localStorage del cliente).
-  // Para producción real con backend, despliega en Vercel y pon "/api/loyalty" aquí.
-  loyaltyApi: "",
+  // GitHub Pages: llamamos directo al Apps Script Web App.
+  // El Content-Type text/plain en lib/loyalty.ts evita el preflight CORS
+  // (Apps Script acepta el body como JSON en string).
+  loyaltyApi:
+    "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
 
   // Juegos: 1 partida por login con cooldown
   gameCooldownHours: 10,
