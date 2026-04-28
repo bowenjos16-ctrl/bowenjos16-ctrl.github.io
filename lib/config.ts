@@ -77,12 +77,13 @@ export const CONFIG = {
     },
   ],
 
-  // Apps Script Web App URL (único endpoint para ratings + loyalty)
+  // Apps Script Web App URL (para ratings)
   ratingEndpoint:
     "https://script.google.com/macros/s/AKfycbwCtVgUP-7b2p2GiObXw7KbAVSW0l06Y5F-ymw5Gm9RTfY9GR2cwBSBqvekFNBbfU_n/exec",
-  // Usa proxy interno (/api/loyalty) para evitar bucle de redirect CORS
-  // que ocurre con Apps Script en POST cross-origin desde el navegador.
-  loyaltyApi: "/api/loyalty",
+  // GitHub Pages no soporta API routes server-side. loyaltyApi vacío activa modo demo
+  // (cualquier OTP de 6 dígitos sirve, datos en localStorage del cliente).
+  // Para producción real con backend, despliega en Vercel y pon "/api/loyalty" aquí.
+  loyaltyApi: "",
 
   // Juegos: 1 partida por login con cooldown
   gameCooldownHours: 10,
