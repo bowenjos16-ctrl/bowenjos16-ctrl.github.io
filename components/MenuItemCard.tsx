@@ -17,6 +17,34 @@ const SUGGESTIONS: Record<string, string> = {
   "Rib-eye": "Sugerencia: papa chaucha y choclo con queso",
 };
 
+/**
+ * Formatea precios para preservar 2 decimales:
+ * - "3" → "3.00"
+ * - "3.5" → "3.50"
+ * - "3.50" → "3.50" (sin cambios)
+ * - "1.50 / 6.00" → "1.50 / 6.00" (multi-precio, sin cambios)
+ * - "—" o cualquier no-numérico → sin cambios
+ */
+function formatPrice(price: string): string {
+  if (!price) return price;
+  const trimmed = price.trim();
+  if (!trimmed) return trimmed;
+  // Multi-precio: formatear cada parte numérica
+  if (trimmed.includes("/")) {
+    return trimmed
+      .split("/")
+      .map((part) => {
+        const p = part.trim();
+        const n = Number(p.replace(",", "."));
+        return Number.isFinite(n) ? n.toFixed(2) : p;
+      })
+      .join(" / ");
+  }
+  const n = Number(trimmed.replace(",", "."));
+  if (Number.isFinite(n)) return n.toFixed(2);
+  return trimmed;
+}
+
 export default function MenuItemCard({
   item,
   index,
@@ -71,7 +99,7 @@ export default function MenuItemCard({
           <span className="dotted-leader" />
         </div>
         {item.price && (
-          <span className="price-tag text-lg sm:text-xl">${item.price}</span>
+          <span className="price-tag text-lg sm:text-xl">${formatPrice(item.price)}</span>
         )}
       </div>
       {item.description && (
