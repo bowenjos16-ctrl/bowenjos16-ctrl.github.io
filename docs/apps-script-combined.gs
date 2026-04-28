@@ -879,7 +879,8 @@ function getMenu_(menuKind) {
             .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); })
             .map(function (i) {
               var out = { name: String(i.name || "") };
-              if (i.price !== "" && i.price !== null && i.price !== undefined) out.price = String(i.price);
+              var p = formatPrice_(i.price);
+              if (p) out.price = p;
               if (i.description) out.description = String(i.description);
               if (i.badge) out.badge = String(i.badge);
               if (i.image_url) out.image = driveImageUrl_(String(i.image_url));
@@ -929,6 +930,19 @@ function readSheet_(ss, name) {
     });
 }
 
+// Helper: formatea precio preservando 2 decimales y soportando "1.50 / 6.00"
+function formatPrice_(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  var s = String(v).trim();
+  if (!s) return "";
+  // Multi-precio (vaso/jarra) o cualquier formato no numérico: pasa tal cual
+  if (s.indexOf("/") !== -1) return s;
+  // Si es numérico, formatear con 2 decimales
+  var n = Number(s.replace(",", "."));
+  if (!isNaN(n) && isFinite(n)) return n.toFixed(2);
+  return s;
+}
+
 // Helper: convierte cualquier valor a boolean (TRUE/FALSE, 1/0, etc.)
 function truthy_(v) {
   if (v === true) return true;
@@ -953,6 +967,44 @@ function driveImageUrl_(url) {
   if (/^[-\w]{25,}$/.test(u)) return "https://drive.google.com/thumbnail?id=" + u + "&sz=w800";
   // No es Drive: pasa tal cual (Cloudinary, etc.)
   return u;
+}
+
+// Arregla la columna de precios en Menu_Items: la formatea como texto y
+// reescribe los valores numéricos como "X.XX" (ej: 3 → "3.00", 3.5 → "3.50").
+// Útil si Sheets convirtió automáticamente "3.00" a 3 al hacer migrarMenuActual().
+function arreglarFormatoPrecios() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.MENU_ITM);
+  if (!sh) {
+    SpreadsheetApp.getUi().alert("No existe la hoja Menu_Items. Corre migrarMenuActual primero.");
+    return;
+  }
+  var lastRow = sh.getLastRow();
+  if (lastRow < 2) return;
+
+  // Forzar columna C como texto
+  sh.getRange("C:C").setNumberFormat("@");
+
+  var range = sh.getRange(2, 3, lastRow - 1, 1);
+  var values = range.getValues();
+  var updated = values.map(function (row) {
+    return [formatPrice_(row[0])];
+  });
+  range.setValues(updated);
+
+  // Invalida cache para que el sitio recargue datos frescos
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.remove("menu:regular");
+    cache.remove("menu:tradicional");
+  } catch (e) {}
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "Listo. " + updated.length + " precios formateados a 2 decimales.\n" +
+      "Cache limpiada — el sitio mostrará los precios correctos en el próximo fetch."
+    );
+  } catch (e) {}
 }
 
 // Invalida cache manualmente (útil tras editar el Sheet y querer ver cambios ya)
@@ -980,6 +1032,9 @@ function migrarMenuActual() {
     ["category_id", "id", "title", "subtitle", "note", "order", "active"]);
   var itmSh = ensureSheet_(ss, SHEETS.MENU_ITM,
     ["section_id", "name", "price", "description", "badge", "image_url", "order", "active"]);
+
+  // Forzar columna "price" (C) como texto plano para preservar "3.00" y "1.50 / 6.00"
+  itmSh.getRange("C:C").setNumberFormat("@");
 
   // Limpia datos previos (preserva headers)
   if (catSh.getLastRow() > 1) catSh.getRange(2, 1, catSh.getLastRow() - 1, catSh.getLastColumn()).clearContent();

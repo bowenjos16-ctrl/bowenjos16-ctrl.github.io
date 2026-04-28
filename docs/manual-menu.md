@@ -35,7 +35,7 @@ El menú del sitio web se carga automáticamente desde tres pestañas en el mism
 
 ### Paso 1 — Subir la foto a Drive
 
-1. Abre la carpeta **Menu Imagenes** en Google Drive
+1. Abre la carpeta **Menu Imagenes**: https://drive.google.com/drive/folders/19saZQf-I2yr4ml4jUTuPJrtTQsY6owkN
 2. Arrastra la foto desde tu computadora o teléfono (o usa el botón "Nuevo → Subir archivo")
 3. Espera a que termine de subirse
 
