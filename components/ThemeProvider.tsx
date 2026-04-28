@@ -24,8 +24,8 @@ export function useTheme() {
 
 /**
  * Provee el menú activo y aplica data-theme al <html>
- * - morning = verde (menú tradicional 8-12 h)
- * - evening = rojo (menú principal 12-24 h)
+ * - morning = verde (menú tradicional 8:00-16:00)
+ * - evening = rojo (menú principal 16:00-22:00)
  */
 export default function ThemeProvider({
   children,

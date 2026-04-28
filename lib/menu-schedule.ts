@@ -10,8 +10,8 @@ export const MENU_SCHEDULE = {
     label: "Menú Tradicional",
     subtitle: "Desayunos y típicos de Piñas",
     startHour: 8,
-    endHour: 12,
-    scheduleLabel: "8:00 - 12:00 h",
+    endHour: 16,
+    scheduleLabel: "8:00 - 16:00 h",
     description:
       "Los sabores auténticos de nuestra querida tierra Piñas. Tigrillos, bolones, molloco y tradicionales — pensado para los amantes de la rica y verdadera comida típica de nuestra región.",
     data: menuTradicional,
@@ -20,9 +20,9 @@ export const MENU_SCHEDULE = {
     kind: "regular" as const,
     label: "Menú Principal",
     subtitle: "Parrilla, mariscos y bar",
-    startHour: 12,
-    endHour: 24, // hasta medianoche (23:59)
-    scheduleLabel: "12:00 - 23:59 h",
+    startHour: 16,
+    endHour: 22, // hasta las 10 PM
+    scheduleLabel: "16:00 - 22:00 h",
     description:
       "Cortes premium de res Brangus y cerdo Yorkshire canadiense, mariscos frescos, picaditas y bar completo. La experiencia completa de Corte Piedra.",
     data: menuRegular,
@@ -31,10 +31,12 @@ export const MENU_SCHEDULE = {
 
 /**
  * Devuelve qué menú corresponde según la hora local del navegador.
- * Si la hora está fuera de ambos rangos (madrugada 0-8), muestra el regular.
+ * Menú Tradicional: 8:00 - 16:00 (8am - 4pm)
+ * Menú Principal: 16:00 - 22:00 (4pm - 10pm)
+ * Si la hora está fuera de ambos rangos (22:00-8:00), muestra el regular.
  */
 export function getMenuKindByHour(hour: number): MenuKind {
-  if (hour >= 8 && hour < 12) return "tradicional";
+  if (hour >= 8 && hour < 16) return "tradicional";
   return "regular";
 }
 

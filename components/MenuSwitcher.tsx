@@ -23,15 +23,15 @@ export default function MenuSwitcher({
     {
       kind: "tradicional",
       label: "Tradicional",
-      short: "8–12",
-      time: "8:00 — 12:00",
+      short: "8am–4pm",
+      time: "8:00 — 16:00",
       Icon: Sun,
     },
     {
       kind: "regular",
       label: "Principal",
-      short: "12–24",
-      time: "12:00 — 23:59",
+      short: "4pm–10pm",
+      time: "16:00 — 22:00",
       Icon: Flame,
     },
   ];
