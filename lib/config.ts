@@ -21,7 +21,7 @@ export const CONFIG = {
 
   // URL de Google para dejar reseña pública
   googleReviewUrl:
-    "https://search.google.com/local/writereview?placeid=CORTE_PIEDRA_PLACE_ID",
+    "https://search.google.com/local/writereview?placeid=0x90335f9d6bb982b3:0x389b9d01da8c1b0e",
 
   // YouTube video ID para fondo del hero (drone de Piñas)
   heroVideoId: "LoEBnNiXRo4",
