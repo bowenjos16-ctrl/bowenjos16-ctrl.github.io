@@ -248,7 +248,10 @@ function sendOwnerEmail_(cfg, pw, recipients) {
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action;
   if (action === "getConfig") return json_(getPublicConfig_());
-  if (action === "getMenu") return json_(getMenu_((e.parameter.kind || "regular")));
+  if (action === "getMenu") {
+    var nocache = e.parameter.nocache === "1" || e.parameter.nocache === "true";
+    return json_(getMenu_((e.parameter.kind || "regular"), { nocache: nocache }));
+  }
   return ContentService
     .createTextOutput("Corte Piedra API")
     .setMimeType(ContentService.MimeType.TEXT);
@@ -853,13 +856,17 @@ function awardInstagramBonus_(data) {
 //
 // Cache server: 5 min (CacheService).  Cache cliente: 1 h (localStorage).
 
-function getMenu_(menuKind) {
+function getMenu_(menuKind, opts) {
+  opts = opts || {};
   var cache = CacheService.getScriptCache();
   var cacheKey = "menu:" + menuKind;
-  try {
-    var cached = cache.get(cacheKey);
-    if (cached) return JSON.parse(cached);
-  } catch (e) {}
+  // Si nocache=1, bypassea el cache (útil para forzar lectura fresca)
+  if (!opts.nocache) {
+    try {
+      var cached = cache.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var cats = readSheet_(ss, SHEETS.MENU_CAT);
@@ -1082,6 +1089,31 @@ function migrarMenuActual() {
     ["category_id", "id", "title", "subtitle", "note", "order", "active"]);
   var itmSh = ensureSheet_(ss, SHEETS.MENU_ITM,
     ["section_id", "name", "price", "description", "badge", "image_url", "order", "active"]);
+
+  // ⚠️ PROTECCIÓN: si las hojas ya tienen datos, pedir confirmación explícita
+  // para evitar borrar ediciones manuales por accidente.
+  var hasData = catSh.getLastRow() > 1 || secSh.getLastRow() > 1 || itmSh.getLastRow() > 1;
+  if (hasData) {
+    try {
+      var ui = SpreadsheetApp.getUi();
+      var resp = ui.alert(
+        "⚠️ Hojas del menú ya contienen datos",
+        "Si continúas, se BORRARÁN todos los precios, descripciones e imágenes que hayas editado manualmente y se reemplazarán con los valores hardcodeados originales.\n\n" +
+        "¿Estás SEGURO que quieres reescribir todo desde cero?",
+        ui.ButtonSet.YES_NO
+      );
+      if (resp !== ui.Button.YES) {
+        ui.alert("Migración cancelada. Tus datos del Sheet quedan intactos.");
+        return;
+      }
+    } catch (e) {
+      // Si no hay UI disponible (ejecución sin dialog), abortar por seguridad
+      throw new Error(
+        "Las hojas ya tienen datos. Para evitar perder ediciones, esta función solo " +
+        "puede correrse con confirmación visual. Ejecuta desde el editor de Apps Script."
+      );
+    }
+  }
 
   // Forzar columna "price" (C) como texto plano para preservar "3.00" y "1.50 / 6.00"
   itmSh.getRange("C:C").setNumberFormat("@");

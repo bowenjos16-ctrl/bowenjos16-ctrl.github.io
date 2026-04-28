@@ -58,8 +58,10 @@ async function fetchAndCache(kind: MenuKind): Promise<MenuCategory[] | null> {
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
-  // Cache buster on URL forces server to skip its 5-min cache when explicitly requested
-  const url = `${CONFIG.loyaltyApi}?action=getMenu&kind=${encodeURIComponent(kind)}&t=${Date.now()}`;
+  // nocache=1 bypassea el cache server-side (Apps Script CacheService).
+  // Combinado con cache cliente de 5 min, mantenemos pocos hits al Sheet pero
+  // garantizamos datos frescos cuando el cliente realmente fetcha.
+  const url = `${CONFIG.loyaltyApi}?action=getMenu&kind=${encodeURIComponent(kind)}&nocache=1&t=${Date.now()}`;
   try {
     const res = await fetch(url, {
       method: "GET",
@@ -90,7 +92,11 @@ async function fetchAndCache(kind: MenuKind): Promise<MenuCategory[] | null> {
       return null;
     }
     writeCache(kind, json.data);
-    console.log(`[menu-api] ✓ Fetched ${kind} menu (${json.data.length} categories) at ${new Date().toISOString()}`);
+    // Debug: log first item with price for quick verification
+    const firstItem = json.data?.[0]?.sections?.[0]?.items?.[0];
+    console.log(
+      `[menu-api] ✓ Fetched ${kind} menu (${json.data.length} cats). First item: ${firstItem?.name} = $${firstItem?.price}. generatedAt=${json.generatedAt}`,
+    );
     return json.data;
   } catch (err) {
     console.error("[menu-api] ✗ Fetch failed for", kind, ":", err);
