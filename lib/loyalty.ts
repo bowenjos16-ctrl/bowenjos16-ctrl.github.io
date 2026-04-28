@@ -60,27 +60,77 @@ export function haversineMeters(
 // Cliente API — POSTea al Apps Script Web App
 // ──────────────────────────────────────────────────────────
 
+/** Genera un idempotency key único por request (evita doble-conteo en reintentos). */
+function genIdempotencyKey(): string {
+  return (
+    Date.now().toString(36) +
+    "-" +
+    Math.random().toString(36).slice(2, 10)
+  );
+}
+
+/**
+ * POST al endpoint loyalty con:
+ *  - timeout 8s (guía sección 8)
+ *  - 1 reintento automático ante fallos de red / respuesta inválida
+ *  - idempotencyKey para que el reintento no duplique transacciones
+ *  - errores con mensaje específico (no genérico "No se pudo conectar")
+ */
 async function apiPost<T = unknown>(body: Record<string, unknown>): Promise<T> {
   if (!CONFIG.loyaltyApi) {
     // Modo demo / sin backend
     return demoMock(body) as T;
   }
-  try {
-    const res = await fetch(CONFIG.loyaltyApi, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(body),
-    });
-    const text = await res.text();
+
+  // Inyecta idempotencyKey si no viene
+  const payload = {
+    idempotencyKey: genIdempotencyKey(),
+    ...body,
+  };
+
+  const attempt = async (): Promise<T> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
-      return JSON.parse(text) as T;
-    } catch {
-      console.error("[loyalty] respuesta no-JSON:", res.status, text.slice(0, 200));
-      throw new Error(`Respuesta inválida (${res.status})`);
+      const res = await fetch(CONFIG.loyaltyApi, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+        cache: "no-store",
+      });
+      const text = await res.text();
+      // Detecta respuesta HTML (típicamente auth page de Google si proxy falló)
+      if (text.trimStart().startsWith("<")) {
+        console.error("[loyalty] respuesta HTML:", res.status, text.slice(0, 200));
+        throw new Error(`Respuesta no-JSON del servidor (${res.status})`);
+      }
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        console.error("[loyalty] respuesta no-JSON:", res.status, text.slice(0, 200));
+        throw new Error(`Respuesta inválida (${res.status})`);
+      }
+    } finally {
+      clearTimeout(timer);
     }
+  };
+
+  try {
+    return await attempt();
   } catch (err) {
-    console.error("[loyalty] fetch falló:", err);
-    throw err;
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    console.warn("[loyalty] primer intento falló, reintentando:", err);
+    try {
+      return await attempt();
+    } catch (err2) {
+      console.error("[loyalty] fetch falló (2 intentos):", err2);
+      if (isAbort || (err2 instanceof Error && err2.name === "AbortError")) {
+        throw new Error("Tiempo de espera agotado. Verifica tu conexión.");
+      }
+      // Re-throw con el mensaje original para que la UI lo muestre
+      throw err2 instanceof Error ? err2 : new Error(String(err2));
+    }
   }
 }
 

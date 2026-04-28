@@ -233,24 +233,76 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  var action = "(none)";
   try {
     var raw = (e && e.postData && e.postData.contents) || "{}";
     var data = JSON.parse(raw);
-    var action = data.action || (e && e.parameter && e.parameter.action);
+    action = data.action || (e && e.parameter && e.parameter.action) || "(rating)";
 
-    if (!action) return handleRating_(data);
+    if (!data.action) return handleRating_(data);
 
-    switch (action) {
-      case "register":   return json_(register_(data));
+    switch (data.action) {
+      case "register":   return json_(withLock_(function () { return register_(data); }));
       case "login":      return json_(login_(data));
       case "getClient":  return json_(getClient_(data));
-      case "accumulate": return json_(accumulate_(data));
+      case "accumulate": return json_(withLock_(function () { return accumulate_(data); }));
       case "getConfig":  return json_(getPublicConfig_());
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
+    console.log(JSON.stringify({ fn: "doPost", action: action, error: String(err) }));
     return json_({ ok: false, error: String(err) });
   }
+}
+
+/**
+ * Ejecuta una operacion bajo LockService para evitar race conditions
+ * cuando dos requests caen simultaneamente sobre el mismo recurso.
+ * Guia seccion 8 - Evitar duplicados.
+ */
+function withLock_(fn) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+  } catch (e) {
+    return { ok: false, error: "busy", message: "Servidor ocupado, intenta de nuevo." };
+  }
+  try {
+    return fn();
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+/**
+ * Verifica + registra una idempotencyKey reciente.
+ * Si la key ya se uso en los ultimos 10 minutos, retorna true (duplicado).
+ * Usa PropertiesService como cache de corto plazo.
+ */
+function isDuplicateRequest_(key) {
+  if (!key) return false;
+  var props = PropertiesService.getScriptProperties();
+  var cacheKey = "idem:" + key;
+  var existing = props.getProperty(cacheKey);
+  if (existing) return true;
+  // Almacena con timestamp; limpia entradas viejas oportunisticamente
+  props.setProperty(cacheKey, String(Date.now()));
+  cleanupIdempotencyKeys_(props);
+  return false;
+}
+
+function cleanupIdempotencyKeys_(props) {
+  // Limpieza ligera: borra entradas mayores a 10 min cuando se invoca
+  try {
+    var all = props.getProperties();
+    var now = Date.now();
+    var TTL = 10 * 60 * 1000;
+    Object.keys(all).forEach(function (k) {
+      if (k.indexOf("idem:") !== 0) return;
+      var ts = Number(all[k]);
+      if (!ts || now - ts > TTL) props.deleteProperty(k);
+    });
+  } catch (e) {}
 }
 
 function json_(obj) {
@@ -349,6 +401,12 @@ function accumulate_(data) {
   var pw = String(data.password || "").trim();
   if (!phone || !pw) return { ok: false, error: "missing" };
   if (isPhoneBlocked_(phone)) return { ok: false, error: "blocked" };
+
+  // Idempotency: si el cliente reintento, devolvemos estado actual sin sumar de nuevo
+  if (isDuplicateRequest_(data.idempotencyKey)) {
+    var existing = findClientByPhone_(phone);
+    return { ok: true, duplicate: true, client: existing, pointsAwarded: 0 };
+  }
 
   var cfg = readConfig_();
   var c = findClientByPhone_(phone);

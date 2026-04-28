@@ -129,8 +129,9 @@ export default function LoyaltyModal() {
       } else {
         setError("Error al iniciar sesión.");
       }
-    } catch {
-      setError("No se pudo conectar.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setError(`No se pudo conectar: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -152,8 +153,9 @@ export default function LoyaltyModal() {
       } else {
         setError("Error al registrarte. Revisa los datos.");
       }
-    } catch {
-      setError("No se pudo conectar.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setError(`No se pudo conectar: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -214,8 +216,9 @@ export default function LoyaltyModal() {
       } else {
         setError("Error al acumular.");
       }
-    } catch {
-      setError("No se pudo conectar.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setError(`No se pudo conectar: ${msg}`);
     } finally {
       setLoading(false);
     }
