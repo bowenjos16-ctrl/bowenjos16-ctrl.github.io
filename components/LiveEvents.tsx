@@ -9,10 +9,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Radio,
+  Flame,
 } from "lucide-react";
 import { CONFIG, waGeneralLink } from "@/lib/config";
 
-const ICONS = { mic: Mic, music: Music, "chef-hat": ChefHat };
+const ICONS = { mic: Mic, music: Music, "chef-hat": ChefHat, flame: Flame };
 const DAY_LETTERS = ["D", "L", "M", "M", "J", "V", "S"];
 const DAY_NAMES = [
   "Domingo",
@@ -39,6 +40,7 @@ const MONTHS = [
 ];
 
 type EventDef = (typeof CONFIG.liveEvents)[number];
+type PromoDef = (typeof CONFIG.promosByDay)[number];
 
 function sameDay(a: Date, b: Date) {
   return (
@@ -84,10 +86,14 @@ export default function LiveEvents() {
   const eventsForDay = (date: Date): EventDef[] =>
     CONFIG.liveEvents.filter((e) => e.day === date.getDay());
 
+  const promoForDay = (date: Date): PromoDef =>
+    CONFIG.promosByDay[date.getDay()];
+
   const isToday = (d: Date | null) => d && today && sameDay(d, today);
   const isSelected = (d: Date | null) => d && selected && sameDay(d, selected);
 
   const selectedEvents = selected ? eventsForDay(selected) : [];
+  const selectedPromo = selected ? promoForDay(selected) : null;
 
   const shift = (delta: number) => {
     setViewMonth((v) => {
@@ -265,7 +271,7 @@ export default function LiveEvents() {
             </div>
 
             <AnimatePresence mode="wait">
-              {selectedEvents.length > 0 ? (
+              {selectedEvents.length > 0 || selectedPromo ? (
                 <motion.div
                   key={selected?.toISOString()}
                   initial={{ opacity: 0, y: 10 }}
@@ -273,6 +279,46 @@ export default function LiveEvents() {
                   exit={{ opacity: 0, y: -5 }}
                   className="flex flex-col gap-3"
                 >
+                  {/* Promoción del día si existe */}
+                  {selectedPromo && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0 }}
+                      className="red-border overflow-hidden rounded-2xl p-5"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[var(--ember)] to-[#ff9d3a]">
+                          <Flame className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-serif text-xl font-bold text-white">
+                            {selectedPromo.title}
+                          </h4>
+                          <p className="mt-1 text-sm text-white/70">
+                            {selectedPromo.description}
+                          </p>
+                          <div className="mt-3 flex items-center gap-2">
+                            {selectedPromo.offerType === "combo" && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--red)]/20 px-3 py-1 text-xs font-bold tracking-wider text-[var(--red)] uppercase">
+                                {selectedPromo.qty} x ${selectedPromo.pricePerItem.toFixed(2)}
+                              </span>
+                            )}
+                            {selectedPromo.offerType === "discount" && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--red)]/20 px-3 py-1 text-xs font-bold tracking-wider text-[var(--red)] uppercase">
+                                {selectedPromo.discountPct}% OFF
+                              </span>
+                            )}
+                            <span className="text-xs text-white/50">
+                              {selectedPromo.subtitle}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Eventos en vivo */}
                   {selectedEvents.map((e, i) => {
                     const Icon =
                       ICONS[e.icon as keyof typeof ICONS] ?? Music;
@@ -281,7 +327,7 @@ export default function LiveEvents() {
                         key={e.title}
                         initial={{ opacity: 0, x: 10 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.08 }}
+                        transition={{ delay: (selectedPromo ? i + 1 : i) * 0.08 }}
                         className="red-border overflow-hidden rounded-2xl p-5"
                       >
                         <div className="flex items-start gap-4">
