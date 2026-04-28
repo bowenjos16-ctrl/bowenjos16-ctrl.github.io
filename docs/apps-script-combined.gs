@@ -36,8 +36,17 @@ var SHEETS = {
   CAN: "Canjes",
   PWD: "Passwords_Diarias",
   CFG: "Configuracion",
-  FAIL: "Intentos_Fallidos"
+  FAIL: "Intentos_Fallidos",
+  REW: "Recompensas"
 };
+
+// Recompensas por defecto - se crean en setup() si la hoja esta vacia
+var DEFAULT_REWARDS = [
+  { id: "BEB001", nombre: "Bebida grande gratis", descripcion: "Cualquier bebida grande del menu", costo_pts: 200, activo: true },
+  { id: "POS001", nombre: "Postre del chef", descripcion: "Postre seleccionado del dia por el chef", costo_pts: 500, activo: true },
+  { id: "DSC001", nombre: "20% off en tu cuenta", descripcion: "Descuento del 20% sobre el subtotal", costo_pts: 1000, activo: true },
+  { id: "CEN001", nombre: "Cena para 2 cortesia", descripcion: "Menu degustacion para 2 personas", costo_pts: 2000, activo: true }
+];
 
 // =============================================================
 //  SETUP (ejecutar UNA vez)
@@ -61,6 +70,15 @@ function setup() {
   ]);
   ensureSheet_(ss, SHEETS.PWD, ["fecha", "password_6_digitos", "fecha_envio_correo", "enviado_a"]);
   ensureSheet_(ss, SHEETS.FAIL, ["fecha_hora", "telefono", "password_intentada", "ip"]);
+
+  // Recompensas - hoja con catalogo de premios canjeables
+  var rewSheet = ensureSheet_(ss, SHEETS.REW, ["id", "nombre", "descripcion", "costo_pts", "activo"]);
+  if (rewSheet.getLastRow() <= 1) {
+    for (var r = 0; r < DEFAULT_REWARDS.length; r++) {
+      var w = DEFAULT_REWARDS[r];
+      rewSheet.appendRow([w.id, w.nombre, w.descripcion, w.costo_pts, w.activo]);
+    }
+  }
 
   var cfg = ss.getSheetByName(SHEETS.CFG);
   if (!cfg) {
@@ -247,6 +265,9 @@ function doPost(e) {
       case "getClient":  return json_(getClient_(data));
       case "accumulate": return json_(withLock_(function () { return accumulate_(data); }));
       case "getConfig":  return json_(getPublicConfig_());
+      case "getRewards": return json_(getRewards_());
+      case "redeem":     return json_(withLock_(function () { return redeem_(data); }));
+      case "getHistory": return json_(getHistory_(data));
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
@@ -579,6 +600,178 @@ function computeLevel_(totalPoints, cfg) {
   if (totalPoints >= oro) return "Oro";
   if (totalPoints >= plata) return "Plata";
   return "Bronce";
+}
+
+// =============================================================
+//  REWARDS / CANJES / HISTORIAL endpoints
+// =============================================================
+
+/**
+ * Lee el catalogo de recompensas activas desde la hoja Recompensas.
+ * Devuelve solo las que tienen activo=true.
+ */
+function getRewards_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.REW);
+  if (!sh) return { ok: true, rewards: [] };
+  var rows = sh.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r[0]) continue;
+    var activo = r[4];
+    if (activo === false || activo === "FALSE" || activo === "false" || activo === 0) continue;
+    out.push({
+      id: String(r[0]),
+      nombre: String(r[1]),
+      descripcion: String(r[2]),
+      costo_pts: Number(r[3] || 0)
+    });
+  }
+  return { ok: true, rewards: out };
+}
+
+/**
+ * Canjea una recompensa: valida puntos, descuenta del cliente,
+ * registra en Canjes y devuelve un codigo unico de 6 caracteres.
+ */
+function redeem_(data) {
+  var phone = normalizePhone_(data.telefono);
+  var rewardId = String(data.rewardId || "").trim();
+  if (!phone || !rewardId) return { ok: false, error: "missing" };
+
+  // Idempotency: si reintenta, no descontar dos veces
+  if (isDuplicateRequest_(data.idempotencyKey)) {
+    return { ok: true, duplicate: true, message: "Canje ya procesado" };
+  }
+
+  var c = findClientByPhone_(phone);
+  if (!c) return { ok: false, error: "not_found" };
+
+  // Buscar la recompensa en el catalogo
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var rewSh = ss.getSheetByName(SHEETS.REW);
+  if (!rewSh) return { ok: false, error: "no_rewards" };
+  var rewRows = rewSh.getDataRange().getValues();
+  var reward = null;
+  for (var i = 1; i < rewRows.length; i++) {
+    if (String(rewRows[i][0]) === rewardId) {
+      var activo = rewRows[i][4];
+      if (activo === false || activo === "FALSE" || activo === "false" || activo === 0) {
+        return { ok: false, error: "reward_inactive" };
+      }
+      reward = {
+        id: String(rewRows[i][0]),
+        nombre: String(rewRows[i][1]),
+        costo_pts: Number(rewRows[i][3] || 0)
+      };
+      break;
+    }
+  }
+  if (!reward) return { ok: false, error: "reward_not_found" };
+
+  // Validar puntos
+  if (Number(c.puntos_actuales) < reward.costo_pts) {
+    return { ok: false, error: "insufficient_points", needed: reward.costo_pts, have: c.puntos_actuales };
+  }
+
+  // Descontar puntos del cliente (NO toca puntos_totales_historicos)
+  var cli = ss.getSheetByName(SHEETS.CLI);
+  var rows = cli.getDataRange().getValues();
+  var newCurrent = 0;
+  for (var j = 1; j < rows.length; j++) {
+    if (normalizePhone_(rows[j][2]) === phone) {
+      var rowIdx = j + 1;
+      newCurrent = Number(rows[j][5] || 0) - reward.costo_pts;
+      cli.getRange(rowIdx, 6).setValue(newCurrent);
+      break;
+    }
+  }
+
+  // Generar codigo unico de 6 caracteres alfanumericos (sin O/0/1/I para legibilidad)
+  var code = generateRedeemCode_();
+
+  // Registrar en hoja Canjes
+  var canSh = ss.getSheetByName(SHEETS.CAN);
+  canSh.appendRow([
+    Utilities.getUuid(),
+    c.id,
+    phone,
+    new Date(),
+    reward.nombre + " (codigo: " + code + ")",
+    reward.costo_pts
+  ]);
+
+  return {
+    ok: true,
+    code: code,
+    reward: reward,
+    newPoints: newCurrent,
+    client: findClientByPhone_(phone)
+  };
+}
+
+function generateRedeemCode_() {
+  var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0,1,I,O
+  var code = "";
+  for (var i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+/**
+ * Devuelve las ultimas N transacciones (acumulaciones + canjes) del cliente.
+ * Combina ambas hojas y ordena por fecha descendente.
+ */
+function getHistory_(data) {
+  var phone = normalizePhone_(data.telefono);
+  if (!phone) return { ok: false, error: "missing" };
+  var limit = Number(data.limit || 20);
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var items = [];
+
+  // Acumulaciones
+  var trxSh = ss.getSheetByName(SHEETS.TRX);
+  if (trxSh) {
+    var trxRows = trxSh.getDataRange().getValues();
+    for (var i = 1; i < trxRows.length; i++) {
+      if (normalizePhone_(trxRows[i][2]) === phone) {
+        items.push({
+          tipo: "acumulacion",
+          fecha: trxRows[i][3],
+          descripcion: "Visita al restaurante",
+          puntos: Number(trxRows[i][4] || 0)
+        });
+      }
+    }
+  }
+
+  // Canjes
+  var canSh = ss.getSheetByName(SHEETS.CAN);
+  if (canSh) {
+    var canRows = canSh.getDataRange().getValues();
+    for (var k = 1; k < canRows.length; k++) {
+      if (normalizePhone_(canRows[k][2]) === phone) {
+        items.push({
+          tipo: "canje",
+          fecha: canRows[k][3],
+          descripcion: String(canRows[k][4] || ""),
+          puntos: -Number(canRows[k][5] || 0)
+        });
+      }
+    }
+  }
+
+  // Ordenar desc por fecha
+  items.sort(function (a, b) {
+    var da = new Date(a.fecha).getTime();
+    var db = new Date(b.fecha).getTime();
+    return db - da;
+  });
+
+  return { ok: true, history: items.slice(0, limit) };
 }
 
 // =============================================================

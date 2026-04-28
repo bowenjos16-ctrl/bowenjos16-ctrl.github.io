@@ -27,6 +27,20 @@ export type LoyaltyConfig = {
   nivel_oro_min: number;
 };
 
+export type Reward = {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  costo_pts: number;
+};
+
+export type HistoryItem = {
+  tipo: "acumulacion" | "canje";
+  fecha: string;
+  descripcion: string;
+  puntos: number;
+};
+
 export const LOYALTY_STORAGE_KEY = "cp-loyalty-session";
 
 // ──────────────────────────────────────────────────────────
@@ -182,6 +196,38 @@ export async function apiGetConfig(): Promise<{
   return apiPost({ action: "getConfig" });
 }
 
+export async function apiGetRewards(): Promise<{
+  ok: boolean;
+  rewards?: Reward[];
+}> {
+  return apiPost({ action: "getRewards" });
+}
+
+export async function apiRedeem(telefono: string, rewardId: string) {
+  return apiPost<{
+    ok: boolean;
+    code?: string;
+    reward?: Reward;
+    newPoints?: number;
+    client?: LoyaltyClient;
+    error?: string;
+    needed?: number;
+    have?: number;
+  }>({
+    action: "redeem",
+    telefono: normalizePhone(telefono),
+    rewardId,
+  });
+}
+
+export async function apiGetHistory(telefono: string, limit = 20) {
+  return apiPost<{ ok: boolean; history?: HistoryItem[]; error?: string }>({
+    action: "getHistory",
+    telefono: normalizePhone(telefono),
+    limit,
+  });
+}
+
 // ──────────────────────────────────────────────────────────
 // Session (localStorage)
 // ──────────────────────────────────────────────────────────
@@ -311,6 +357,41 @@ function demoMock(body: Record<string, unknown>): unknown {
         nivel_oro_min: 1500,
       },
     };
+  }
+  if (action === "getRewards") {
+    return {
+      ok: true,
+      rewards: [
+        { id: "BEB001", nombre: "Bebida grande gratis", descripcion: "Cualquier bebida grande del menu", costo_pts: 200 },
+        { id: "POS001", nombre: "Postre del chef", descripcion: "Postre seleccionado del dia por el chef", costo_pts: 500 },
+        { id: "DSC001", nombre: "20% off en tu cuenta", descripcion: "Descuento del 20% sobre el subtotal", costo_pts: 1000 },
+        { id: "CEN001", nombre: "Cena para 2 cortesia", descripcion: "Menu degustacion para 2 personas", costo_pts: 2000 },
+      ],
+    };
+  }
+  if (action === "redeem") {
+    if (!db[phone]) return { ok: false, error: "not_found" };
+    const c = db[phone];
+    const rewardId = String(body.rewardId || "");
+    const catalog: Record<string, { nombre: string; costo_pts: number }> = {
+      BEB001: { nombre: "Bebida grande gratis", costo_pts: 200 },
+      POS001: { nombre: "Postre del chef", costo_pts: 500 },
+      DSC001: { nombre: "20% off en tu cuenta", costo_pts: 1000 },
+      CEN001: { nombre: "Cena para 2 cortesia", costo_pts: 2000 },
+    };
+    const reward = catalog[rewardId];
+    if (!reward) return { ok: false, error: "reward_not_found" };
+    if (c.puntos_actuales < reward.costo_pts) {
+      return { ok: false, error: "insufficient_points", needed: reward.costo_pts, have: c.puntos_actuales };
+    }
+    c.puntos_actuales -= reward.costo_pts;
+    db[phone] = c;
+    saveDemoDb(db);
+    const code = Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+    return { ok: true, code, reward, newPoints: c.puntos_actuales, client: c };
+  }
+  if (action === "getHistory") {
+    return { ok: true, history: [] };
   }
   return { ok: false, error: "demo_unknown" };
 }

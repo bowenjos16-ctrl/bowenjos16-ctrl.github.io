@@ -12,6 +12,11 @@ import {
   Award,
   AlertCircle,
   Check,
+  Gift,
+  History as HistoryIcon,
+  Lock,
+  Copy,
+  ChevronLeft,
 } from "lucide-react";
 import { useLoyalty } from "./LoyaltyProvider";
 import Logo from "./Logo";
@@ -19,8 +24,13 @@ import {
   apiRegister,
   apiLogin,
   apiAccumulate,
+  apiGetRewards,
+  apiRedeem,
+  apiGetHistory,
   haversineMeters,
   isDemoMode,
+  type Reward,
+  type HistoryItem,
 } from "@/lib/loyalty";
 
 type View =
@@ -29,6 +39,9 @@ type View =
   | "register"
   | "dashboard"
   | "accumulate"
+  | "rewards"
+  | "history"
+  | "redeemed"
   | "terms";
 
 export default function LoyaltyModal() {
@@ -53,6 +66,16 @@ export default function LoyaltyModal() {
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [awardedAnim, setAwardedAnim] = useState<number | null>(null);
+
+  // Rewards / History
+  const [rewards, setRewards] = useState<Reward[] | null>(null);
+  const [history, setHistory] = useState<HistoryItem[] | null>(null);
+  const [redeemingId, setRedeemingId] = useState<string | null>(null);
+  const [redeemedInfo, setRedeemedInfo] = useState<{
+    code: string;
+    rewardName: string;
+  } | null>(null);
+  const [confirmRedeem, setConfirmRedeem] = useState<Reward | null>(null);
 
   // Reset cuando abre
   useEffect(() => {
@@ -221,6 +244,66 @@ export default function LoyaltyModal() {
       setError(`No se pudo conectar: ${msg}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openRewards = async () => {
+    setError(null);
+    setView("rewards");
+    if (!rewards) {
+      setLoading(true);
+      try {
+        const res = await apiGetRewards();
+        if (res.ok && res.rewards) setRewards(res.rewards);
+        else setError("No se pudo cargar el catálogo de premios.");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error";
+        setError(`No se pudo conectar: ${msg}`);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const openHistory = async () => {
+    if (!client) return;
+    setError(null);
+    setView("history");
+    setLoading(true);
+    try {
+      const res = await apiGetHistory(client.telefono, 20);
+      if (res.ok && res.history) setHistory(res.history);
+      else setHistory([]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error";
+      setError(`No se pudo conectar: ${msg}`);
+      setHistory([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRedeem = async (reward: Reward) => {
+    if (!client) return;
+    setRedeemingId(reward.id);
+    setError(null);
+    try {
+      const res = await apiRedeem(client.telefono, reward.id);
+      if (res.ok && res.code) {
+        if (res.client) setClient(res.client);
+        setRedeemedInfo({ code: res.code, rewardName: reward.nombre });
+        setConfirmRedeem(null);
+        setView("redeemed");
+      } else if (res.error === "insufficient_points") {
+        setError(`Te faltan ${(res.needed ?? 0) - (res.have ?? 0)} pts.`);
+      } else {
+        setError("No se pudo canjear. Intenta de nuevo.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error";
+      setError(`No se pudo conectar: ${msg}`);
+    } finally {
+      setRedeemingId(null);
     }
   };
 
@@ -425,13 +508,53 @@ export default function LoyaltyModal() {
                 <DashboardView
                   key="dashboard"
                   client={client}
+                  config={config}
                   onAccumulate={() => {
                     setError(null);
                     setOtp(["", "", "", "", "", ""]);
                     setView("accumulate");
                     setTimeout(() => otpRefs.current[0]?.focus(), 100);
                   }}
+                  onRewards={openRewards}
+                  onHistory={openHistory}
                   onLogout={logout}
+                />
+              )}
+
+              {view === "rewards" && client && (
+                <RewardsView
+                  key="rewards"
+                  rewards={rewards}
+                  loading={loading}
+                  client={client}
+                  redeemingId={redeemingId}
+                  confirmRedeem={confirmRedeem}
+                  onConfirm={(r) => setConfirmRedeem(r)}
+                  onCancelConfirm={() => setConfirmRedeem(null)}
+                  onRedeem={handleRedeem}
+                  onBack={() => setView("dashboard")}
+                  error={error}
+                />
+              )}
+
+              {view === "history" && (
+                <HistoryView
+                  key="history"
+                  history={history}
+                  loading={loading}
+                  onBack={() => setView("dashboard")}
+                />
+              )}
+
+              {view === "redeemed" && redeemedInfo && (
+                <RedeemedView
+                  key="redeemed"
+                  code={redeemedInfo.code}
+                  rewardName={redeemedInfo.rewardName}
+                  onDone={() => {
+                    setRedeemedInfo(null);
+                    setView("dashboard");
+                  }}
                 />
               )}
 
@@ -656,7 +779,10 @@ function GeoView({
 
 function DashboardView({
   client,
+  config,
   onAccumulate,
+  onRewards,
+  onHistory,
   onLogout,
 }: {
   client: {
@@ -665,7 +791,15 @@ function DashboardView({
     puntos_totales_historicos: number;
     nivel: "Bronce" | "Plata" | "Oro";
   };
+  config: {
+    puntos_por_visita: number;
+    cooldown_horas: number;
+    nivel_plata_min: number;
+    nivel_oro_min: number;
+  } | null;
   onAccumulate: () => void;
+  onRewards: () => void;
+  onHistory: () => void;
   onLogout: () => void;
 }) {
   const gradient =
@@ -674,6 +808,26 @@ function DashboardView({
       : client.nivel === "Plata"
         ? "from-[#e5e5e5] via-[#f5f5f5] to-[#9ca3af]"
         : "from-[#c8202e] via-[#8b1621] to-[#0a0a0a]";
+
+  // Progreso al siguiente nivel
+  const total = client.puntos_totales_historicos;
+  const plata = config?.nivel_plata_min ?? 500;
+  const oro = config?.nivel_oro_min ?? 1500;
+  let nextLevel: string | null = null;
+  let toNext = 0;
+  let progressPct = 100;
+  if (client.nivel === "Bronce") {
+    nextLevel = "Plata";
+    toNext = Math.max(0, plata - total);
+    progressPct = Math.min(100, (total / plata) * 100);
+  } else if (client.nivel === "Plata") {
+    nextLevel = "Oro";
+    toNext = Math.max(0, oro - total);
+    progressPct = Math.min(100, ((total - plata) / (oro - plata)) * 100);
+  }
+
+  const ptsVisita = config?.puntos_por_visita ?? 50;
+  const cooldown = config?.cooldown_horas ?? 24;
 
   return (
     <motion.div
@@ -706,6 +860,29 @@ function DashboardView({
           <p className="mt-1 text-xs text-white/70">
             Acumulados históricos: {client.puntos_totales_historicos} pts
           </p>
+
+          {/* Progreso al siguiente nivel */}
+          {nextLevel && (
+            <div className="mt-4">
+              <div className="mb-1 flex items-center justify-between text-[10px] font-bold tracking-widest text-white/80 uppercase">
+                <span>Hacia {nextLevel}</span>
+                <span>Faltan {toNext} pts</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progressPct}%` }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                  className="h-full bg-white/90"
+                />
+              </div>
+            </div>
+          )}
+          {!nextLevel && (
+            <p className="mt-3 text-[10px] font-bold tracking-widest text-white/80 uppercase">
+              ★ Nivel máximo alcanzado
+            </p>
+          )}
         </div>
       </div>
 
@@ -717,6 +894,23 @@ function DashboardView({
         Acumular puntos de esta visita
       </button>
 
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={onRewards}
+          className="flex flex-col items-center gap-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-xs font-bold tracking-widest text-white uppercase transition-colors hover:bg-white/10"
+        >
+          <Gift className="h-5 w-5 text-[var(--red-bright)]" />
+          Premios
+        </button>
+        <button
+          onClick={onHistory}
+          className="flex flex-col items-center gap-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-xs font-bold tracking-widest text-white uppercase transition-colors hover:bg-white/10"
+        >
+          <HistoryIcon className="h-5 w-5 text-[var(--red-bright)]" />
+          Historial
+        </button>
+      </div>
+
       <button
         onClick={onLogout}
         className="flex w-full items-center justify-center gap-2 rounded-full border border-white/15 px-6 py-2.5 text-xs font-bold tracking-widest text-white/70 uppercase hover:bg-white/5"
@@ -726,8 +920,354 @@ function DashboardView({
       </button>
 
       <p className="text-center text-[10px] text-white/40">
-        Acumulas {50} pts por visita · Cooldown 24 h
+        Acumulas {ptsVisita} pts por visita · Cooldown {cooldown} h
       </p>
+    </motion.div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Vista: Catálogo de premios
+// ──────────────────────────────────────────────────────────
+
+function RewardsView({
+  rewards,
+  loading,
+  client,
+  redeemingId,
+  confirmRedeem,
+  onConfirm,
+  onCancelConfirm,
+  onRedeem,
+  onBack,
+  error,
+}: {
+  rewards: Reward[] | null;
+  loading: boolean;
+  client: { puntos_actuales: number };
+  redeemingId: string | null;
+  confirmRedeem: Reward | null;
+  onConfirm: (r: Reward) => void;
+  onCancelConfirm: () => void;
+  onRedeem: (r: Reward) => void;
+  onBack: () => void;
+  error: string | null;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="space-y-4"
+    >
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onBack}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/20"
+          aria-label="Volver"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <div className="flex-1 text-center">
+          <h3 className="font-serif text-xl font-bold text-white">Premios</h3>
+          <p className="text-[10px] text-white/60">
+            Tienes <strong className="text-white">{client.puntos_actuales}</strong> pts
+          </p>
+        </div>
+        <div className="w-8" />
+      </div>
+
+      {loading && !rewards && (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-white/60" />
+        </div>
+      )}
+
+      {error && <ErrorMsg msg={error} />}
+
+      {rewards && rewards.length === 0 && (
+        <p className="py-8 text-center text-sm text-white/60">
+          No hay premios disponibles por ahora.
+        </p>
+      )}
+
+      {rewards && rewards.length > 0 && (
+        <div className="space-y-3">
+          {rewards
+            .slice()
+            .sort((a, b) => a.costo_pts - b.costo_pts)
+            .map((r) => {
+              const unlocked = client.puntos_actuales >= r.costo_pts;
+              const faltan = r.costo_pts - client.puntos_actuales;
+              const pct = Math.min(
+                100,
+                (client.puntos_actuales / r.costo_pts) * 100,
+              );
+              return (
+                <div
+                  key={r.id}
+                  className={`overflow-hidden rounded-2xl border p-4 transition-all ${
+                    unlocked
+                      ? "border-[var(--red)]/40 bg-gradient-to-br from-[var(--red)]/15 to-transparent"
+                      : "border-white/10 bg-white/5"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        {unlocked ? (
+                          <Gift className="h-4 w-4 text-[var(--red-bright)]" />
+                        ) : (
+                          <Lock className="h-4 w-4 text-white/40" />
+                        )}
+                        <h4 className="font-serif text-base font-bold text-white">
+                          {r.nombre}
+                        </h4>
+                      </div>
+                      <p className="mt-1 text-xs text-white/60">
+                        {r.descripcion}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-serif text-lg font-black text-white">
+                        {r.costo_pts}
+                      </p>
+                      <p className="text-[9px] font-bold tracking-widest text-white/50 uppercase">
+                        pts
+                      </p>
+                    </div>
+                  </div>
+
+                  {!unlocked && (
+                    <div className="mt-3">
+                      <div className="mb-1 text-[10px] text-white/50">
+                        Te faltan {faltan} pts
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full bg-[var(--red)]"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {unlocked && confirmRedeem?.id !== r.id && (
+                    <button
+                      onClick={() => onConfirm(r)}
+                      disabled={!!redeemingId}
+                      className="mt-3 w-full rounded-full bg-[var(--red)] px-4 py-2 text-xs font-bold tracking-widest text-white uppercase hover:bg-[var(--red-bright)] disabled:opacity-50"
+                    >
+                      Canjear
+                    </button>
+                  )}
+
+                  {unlocked && confirmRedeem?.id === r.id && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-center text-xs text-white/80">
+                        ¿Confirmar canje? Se descontarán{" "}
+                        <strong>{r.costo_pts} pts</strong>.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={onCancelConfirm}
+                          disabled={redeemingId === r.id}
+                          className="flex-1 rounded-full border border-white/15 px-4 py-2 text-xs font-bold tracking-widest text-white/80 uppercase hover:bg-white/5 disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => onRedeem(r)}
+                          disabled={redeemingId === r.id}
+                          className="flex-1 rounded-full bg-[var(--red)] px-4 py-2 text-xs font-bold tracking-widest text-white uppercase hover:bg-[var(--red-bright)] disabled:opacity-50"
+                        >
+                          {redeemingId === r.id ? (
+                            <Loader2 className="mx-auto h-3 w-3 animate-spin" />
+                          ) : (
+                            "Confirmar"
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Vista: Historial
+// ──────────────────────────────────────────────────────────
+
+function HistoryView({
+  history,
+  loading,
+  onBack,
+}: {
+  history: HistoryItem[] | null;
+  loading: boolean;
+  onBack: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="space-y-4"
+    >
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onBack}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/20"
+          aria-label="Volver"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <h3 className="flex-1 text-center font-serif text-xl font-bold text-white">
+          Historial
+        </h3>
+        <div className="w-8" />
+      </div>
+
+      {loading && (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-white/60" />
+        </div>
+      )}
+
+      {!loading && history && history.length === 0 && (
+        <p className="py-8 text-center text-sm text-white/60">
+          Aún no tienes movimientos.
+        </p>
+      )}
+
+      {!loading && history && history.length > 0 && (
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+          {history.map((h, i) => {
+            const positive = h.puntos > 0;
+            const date = new Date(h.fecha);
+            const dateStr = date.toLocaleDateString("es-EC", {
+              day: "2-digit",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            return (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                      positive
+                        ? "bg-green-500/15 text-green-400"
+                        : "bg-[var(--red)]/15 text-[var(--red-bright)]"
+                    }`}
+                  >
+                    {positive ? (
+                      <Star className="h-4 w-4" />
+                    ) : (
+                      <Gift className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-white">
+                      {h.descripcion}
+                    </p>
+                    <p className="text-[10px] text-white/50">{dateStr}</p>
+                  </div>
+                </div>
+                <p
+                  className={`font-mono text-sm font-bold ${
+                    positive ? "text-green-400" : "text-[var(--red-bright)]"
+                  }`}
+                >
+                  {positive ? "+" : ""}
+                  {h.puntos}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Vista: Confirmación de canje (código)
+// ──────────────────────────────────────────────────────────
+
+function RedeemedView({
+  code,
+  rewardName,
+  onDone,
+}: {
+  code: string;
+  rewardName: string;
+  onDone: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="space-y-5 py-2 text-center"
+    >
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1, rotate: [0, 10, -10, 0] }}
+        transition={{ delay: 0.1, duration: 0.6 }}
+        className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/15"
+      >
+        <Check className="h-8 w-8 text-green-400" />
+      </motion.div>
+      <div>
+        <h3 className="font-serif text-xl font-bold text-white">
+          ¡Canje exitoso!
+        </h3>
+        <p className="mt-1 text-sm text-white/70">{rewardName}</p>
+      </div>
+
+      <div className="rounded-2xl border border-[var(--red)]/40 bg-gradient-to-br from-[var(--red)]/15 to-transparent p-5">
+        <p className="text-[10px] font-bold tracking-widest text-white/60 uppercase">
+          Muestra este código al mesero
+        </p>
+        <p className="mt-2 font-mono text-3xl font-black tracking-[0.4em] text-white">
+          {code}
+        </p>
+        <button
+          onClick={copy}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold tracking-widest text-white uppercase hover:bg-white/20"
+        >
+          <Copy className="h-3 w-3" />
+          {copied ? "Copiado" : "Copiar código"}
+        </button>
+      </div>
+
+      <p className="text-[10px] text-white/50">
+        El mesero verificará tu código y aplicará el premio.
+      </p>
+
+      <button
+        onClick={onDone}
+        className="w-full rounded-full bg-[var(--red)] px-6 py-3 text-sm font-bold tracking-widest text-white uppercase hover:bg-[var(--red-bright)]"
+      >
+        Volver al dashboard
+      </button>
     </motion.div>
   );
 }
