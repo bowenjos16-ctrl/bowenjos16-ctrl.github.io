@@ -21,7 +21,7 @@ export const CONFIG = {
 
   // URL de Google para dejar reseña pública
   googleReviewUrl:
-    "https://www.google.com/maps/place/Corte+Piedra+Restaurant+and+Bar/@-3.6752031,-79.6890578,16z?entry=ttu&action=highlight&hl=es",
+    "https://www.google.com/maps/search/Corte+Piedra+Restaurante+Pinas/@-3.6752031,-79.6890578,15z?entry=ttu",
 
   // YouTube video ID para fondo del hero (drone de Piñas)
   heroVideoId: "LoEBnNiXRo4",
