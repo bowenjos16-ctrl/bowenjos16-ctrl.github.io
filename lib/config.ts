@@ -34,12 +34,78 @@ export const CONFIG = {
     "Picadita Corte Piedra Mixta",
   ],
 
-  promoOfDay: {
-    title: "Carrusel de mariscos",
-    description: "Ceviche peruano, arroz marinero, chicharrones y patacones.",
-    discountPct: 15,
-    originalPrice: 24,
-  },
+  /**
+   * Promociones rotativas según el día de la semana.
+   * Indexadas por getDay(): 0=Domingo, 1=Lunes, 2=Martes, ..., 6=Sábado.
+   * Martes (2) = null porque el restaurante está cerrado ese día.
+   *
+   * offerType:
+   *  - "combo" → muestra "X x $Y" (ej: "2 x $12.50")
+   *  - "discount" → muestra "X% OFF" en porcentaje
+   */
+  promosByDay: [
+    // 0 — DOMINGO
+    {
+      title: "Domingo de mariscos",
+      description: "10% de descuento en todos los mariscos del menú.",
+      offerType: "discount" as const,
+      discountPct: 10,
+      subtitle: "en mariscos",
+      bgImage: "/dishes/ceviche.webp",
+    },
+    // 1 — LUNES
+    {
+      title: "Lunes de Grilles",
+      description: "Lleva 2 platos de Grilles y aprovecha el especial del día.",
+      offerType: "combo" as const,
+      qty: 2,
+      pricePerItem: 12.5,
+      subtitle: "en Grilles",
+      bgImage: "/dishes/grill-hero.webp",
+    },
+    // 2 — MARTES (cerrado)
+    null,
+    // 3 — MIÉRCOLES
+    {
+      title: "Miércoles de Costillas",
+      description: "2 platos de costillas premium a precio especial.",
+      offerType: "combo" as const,
+      qty: 2,
+      pricePerItem: 30.0,
+      subtitle: "en Costillas",
+      bgImage: "/dishes/grill-hero.webp",
+    },
+    // 4 — JUEVES
+    {
+      title: "Jueves de Ribeyes",
+      description: "Doble corte Ribeye a precio especial.",
+      offerType: "combo" as const,
+      qty: 2,
+      pricePerItem: 26.0,
+      subtitle: "en Ribeyes",
+      bgImage: "/dishes/grill-hero.webp",
+    },
+    // 5 — VIERNES
+    {
+      title: "Viernes de Cócteles",
+      description: "3 cócteles seleccionados a $10 c/u — perfecto para arrancar el finde.",
+      offerType: "combo" as const,
+      qty: 3,
+      pricePerItem: 10.0,
+      subtitle: "en cócteles seleccionados",
+      bgImage: "/dishes/cocktails.webp",
+    },
+    // 6 — SÁBADO
+    {
+      title: "Sábado de Micheladas",
+      description: "3 micheladas heladas por $5 c/u — refresca tu finde.",
+      offerType: "combo" as const,
+      qty: 3,
+      pricePerItem: 5.0,
+      subtitle: "en Micheladas",
+      bgImage: "/dishes/micheladas.webp",
+    },
+  ],
   happyHour: {
     startHour: 17,
     endHour: 19,

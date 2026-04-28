@@ -34,9 +34,13 @@ function useCountdown(targetHour: number) {
 }
 
 export default function PromoBanner() {
-  const p = CONFIG.promoOfDay;
-  const discounted = (p.originalPrice * (1 - p.discountPct / 100)).toFixed(2);
+  // getDay() devuelve 0=Domingo ... 6=Sábado, igual que el array CONFIG.promosByDay
+  const today = new Date().getDay();
+  const p = CONFIG.promosByDay[today];
   const timer = useCountdown(23); // Termina a medianoche
+
+  // Martes (2) o cualquier día sin promo → no renderizar
+  if (!p) return null;
 
   return (
     <section className="relative py-16">
@@ -50,7 +54,7 @@ export default function PromoBanner() {
         >
           <div className="absolute inset-0">
             <Image
-              src="/dishes/ceviche.webp"
+              src={p.bgImage}
               alt=""
               fill
               className="object-cover opacity-30"
@@ -79,14 +83,29 @@ export default function PromoBanner() {
               <p className="mt-2 max-w-md text-[var(--foreground)]/70">
                 {p.description}
               </p>
-              <div className="mt-4 flex items-baseline gap-3">
-                <span className="price-tag text-3xl">${discounted}</span>
-                <span className="text-lg text-[var(--foreground)]/50 line-through">
-                  ${p.originalPrice.toFixed(2)}
-                </span>
-                <span className="rounded-md bg-[var(--red)] px-2 py-0.5 text-xs font-bold text-[white]">
-                  -{p.discountPct}%
-                </span>
+
+              {/* Precio según tipo de oferta */}
+              <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {p.offerType === "combo" && (
+                  <>
+                    <span className="price-tag text-3xl">
+                      {p.qty} x ${p.pricePerItem.toFixed(2)}
+                    </span>
+                    <span className="rounded-md bg-[var(--red)] px-2 py-0.5 text-xs font-bold tracking-wider text-white uppercase">
+                      {p.subtitle}
+                    </span>
+                  </>
+                )}
+                {p.offerType === "discount" && (
+                  <>
+                    <span className="price-tag text-3xl">
+                      {p.discountPct}% OFF
+                    </span>
+                    <span className="rounded-md bg-[var(--red)] px-2 py-0.5 text-xs font-bold tracking-wider text-white uppercase">
+                      {p.subtitle}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
