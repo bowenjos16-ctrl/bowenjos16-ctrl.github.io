@@ -1017,6 +1017,56 @@ function invalidarCacheMenu() {
   } catch (e) {}
 }
 
+/**
+ * Trigger onEdit: limpia el cache automáticamente cuando se edita cualquier
+ * hoja del menú. Esto hace que los cambios sean visibles inmediatamente sin
+ * tener que ejecutar invalidarCacheMenu manualmente.
+ *
+ * Para activarlo: ejecutar instalarTriggerMenu() UNA vez.
+ */
+function onEditMenu_(e) {
+  if (!e || !e.range) return;
+  var sheetName = e.range.getSheet().getName();
+  if (sheetName === SHEETS.MENU_CAT ||
+      sheetName === SHEETS.MENU_SEC ||
+      sheetName === SHEETS.MENU_ITM) {
+    try {
+      var cache = CacheService.getScriptCache();
+      cache.remove("menu:regular");
+      cache.remove("menu:tradicional");
+    } catch (err) {}
+  }
+}
+
+/**
+ * Instala el trigger onEdit que auto-invalida cache al editar el menú.
+ * Solo necesita correrse UNA vez.
+ */
+function instalarTriggerMenu() {
+  // Borrar triggers existentes con el mismo handler
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "onEditMenu_") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  ScriptApp.newTrigger("onEditMenu_")
+    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+    .onEdit()
+    .create();
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "Trigger instalado.\n\n" +
+      "Ahora cualquier edición en Menu_Categorias, Menu_Secciones o Menu_Items\n" +
+      "limpiará automáticamente el cache del servidor.\n\n" +
+      "Los cambios serán visibles en el sitio en ~5 minutos\n" +
+      "(o inmediatamente al hacer Cmd+Shift+R)."
+    );
+  } catch (e) {}
+}
+
 // =============================================================
 //  MIGRACION INICIAL (one-shot)
 //  Ejecutar UNA vez desde el editor de Apps Script.

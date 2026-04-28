@@ -10,7 +10,7 @@ import { CONFIG } from "./config";
 import type { MenuCategory } from "./menu-data";
 import type { MenuKind } from "./menu-schedule";
 
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos (combinado con cache server 5 min: cambios visibles en ~5-10 min máx)
 const CACHE_KEY_PREFIX = "cp_menu_";
 
 type MenuResponse = {
