@@ -790,6 +790,7 @@ function DashboardView({
     puntos_actuales: number;
     puntos_totales_historicos: number;
     nivel: "Bronce" | "Plata" | "Oro";
+    ultima_acumulacion: string | null;
   };
   config: {
     puntos_por_visita: number;
@@ -802,6 +803,26 @@ function DashboardView({
   onHistory: () => void;
   onLogout: () => void;
 }) {
+  // Calcular cooldown — si la última acumulación fue hace menos de cooldown_horas,
+  // bloquear el botón y mostrar tiempo restante
+  const cooldownHours = config?.cooldown_horas ?? 24;
+  const lastAcc = client.ultima_acumulacion
+    ? new Date(client.ultima_acumulacion).getTime()
+    : null;
+  const now = Date.now();
+  const elapsedMs = lastAcc ? now - lastAcc : Infinity;
+  const cooldownMs = cooldownHours * 60 * 60 * 1000;
+  const isOnCooldown = elapsedMs < cooldownMs;
+  const remainingMs = cooldownMs - elapsedMs;
+  const remainingH = Math.floor(remainingMs / (60 * 60 * 1000));
+  const remainingMin = Math.floor(
+    (remainingMs % (60 * 60 * 1000)) / (60 * 1000),
+  );
+  const cooldownLabel = isOnCooldown
+    ? remainingH > 0
+      ? `Próxima visita en ${remainingH}h ${remainingMin}min`
+      : `Próxima visita en ${remainingMin} min`
+    : null;
   const gradient =
     client.nivel === "Oro"
       ? "from-[#b8873f] via-[#e8c87a] to-[#a67c00]"
@@ -886,13 +907,23 @@ function DashboardView({
         </div>
       </div>
 
-      <button
-        onClick={onAccumulate}
-        className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--red)] px-6 py-3 text-sm font-bold tracking-widest text-white uppercase transition-colors hover:bg-[var(--red-bright)]"
-      >
-        <Star className="h-4 w-4 fill-current" />
-        Acumular puntos de esta visita
-      </button>
+      {isOnCooldown ? (
+        <div className="flex w-full flex-col items-center justify-center gap-1 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-center">
+          <span className="flex items-center gap-2 text-xs font-bold tracking-widest text-white/60 uppercase">
+            <Lock className="h-3 w-3" />
+            Ya acumulaste hoy
+          </span>
+          <span className="text-[10px] text-white/50">{cooldownLabel}</span>
+        </div>
+      ) : (
+        <button
+          onClick={onAccumulate}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--red)] px-6 py-3 text-sm font-bold tracking-widest text-white uppercase transition-colors hover:bg-[var(--red-bright)]"
+        >
+          <Star className="h-4 w-4 fill-current" />
+          Acumular puntos de esta visita
+        </button>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <button
