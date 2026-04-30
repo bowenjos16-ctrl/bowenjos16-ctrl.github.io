@@ -213,7 +213,10 @@ export default function LiveEvents() {
                     <div key={`empty-${i}`} className="aspect-square" />
                   );
                 const events = eventsForDay(d);
+                const promo = promoForDay(d);
                 const hasEvents = events.length > 0;
+                const hasPromo = promo !== null;
+                const hasActivity = hasEvents || hasPromo;
                 const todayFlag = isToday(d);
                 const selectedFlag = isSelected(d);
                 return (
@@ -225,15 +228,29 @@ export default function LiveEvents() {
                         ? "bg-[var(--red)] text-white shadow-lg shadow-[var(--red)]/30"
                         : todayFlag
                           ? "bg-white/10 text-white ring-1 ring-[var(--red)]/60"
-                          : hasEvents
+                          : hasActivity
                             ? "text-white hover:bg-white/5"
                             : "text-white/30 hover:text-white/60"
                     }`}
+                    title={[
+                      ...events.map((e) => e.title),
+                      hasPromo ? promo!.title : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   >
                     <span className="relative z-10">{d.getDate()}</span>
-                    {hasEvents && !selectedFlag && (
-                      <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
-                        {events.slice(0, 3).map((e, ei) => (
+                    {hasActivity && !selectedFlag && (
+                      <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
+                        {/* Indicador de promo: cuadradito ámbar */}
+                        {hasPromo && (
+                          <span
+                            className="h-1 w-1 rounded-sm bg-[var(--ember)]"
+                            aria-label="Promo del día"
+                          />
+                        )}
+                        {/* Indicadores de eventos: círculos del color del evento */}
+                        {events.slice(0, 2).map((e, ei) => (
                           <span
                             key={ei}
                             className="h-1 w-1 rounded-full"
@@ -248,9 +265,15 @@ export default function LiveEvents() {
             </div>
 
             {/* Legend */}
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3 border-t border-white/10 pt-4">
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-white/10 pt-4">
+              {/* Indicador de promo del día */}
+              <span className="flex items-center gap-1.5 text-[10px] text-white/60">
+                <span className="h-1.5 w-1.5 rounded-sm bg-[var(--ember)]" />
+                Promo del día
+              </span>
+              {/* Eventos recurrentes */}
               {eventsList
-                .filter((e) => !e.specificDate) // solo recurrentes en la leyenda
+                .filter((e) => !e.specificDate)
                 .map((e) => (
                   <span
                     key={e.title}

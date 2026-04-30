@@ -166,8 +166,14 @@ Además del menú, también puedes editar la sección **Eventos** del sitio (cal
 
 ## Hojas
 
-- **`Eventos`** — eventos en vivo (recurrentes o de fecha específica)
-- **`Promos`** — promo destacada por día de la semana
+- **`Eventos`** — eventos en vivo (música, karaoke, DJ, etc.) — recurrentes o de fecha específica
+- **`Promos`** — promociones de comida/bebida por día de la semana
+
+> **Importante:** ambas aparecen en el calendario del sitio:
+> - Los **eventos** se muestran como círculos de color (Karaoke = rojo, DJ = amarillo, etc.)
+> - Las **promos** se muestran como un cuadradito ámbar 🟧 al lado
+>
+> Por ejemplo, el Jueves tiene "Jueves gastronómico" (evento) Y "Jueves de Ribeyes" (promo) — el calendario muestra AMBOS indicadores en ese día.
 
 ---
 
