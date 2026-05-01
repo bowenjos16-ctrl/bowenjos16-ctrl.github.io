@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Star, Send, Check, Loader2, ExternalLink, Instagram } from "lucide-react";
 import { CONFIG } from "@/lib/config";
 import { loadSession, apiAwardInstagramBonus, apiAwardGoogleReviewBonus } from "@/lib/loyalty";
@@ -20,6 +20,12 @@ export default function RatingSystem() {
   const [instagramAwardLoading, setInstagramAwardLoading] = useState(false);
   const [instagramAwarded, setInstagramAwarded] = useState(false);
   const [googleAwarded, setGoogleAwarded] = useState(false);
+  const [isLogged, setIsLogged] = useState(false);
+
+  // Detecta sesión en el cliente (loadSession lee localStorage)
+  useEffect(() => {
+    setIsLogged(!!loadSession());
+  }, [sent]);
 
   const submit = async () => {
     if (stars === 0) return;
@@ -34,24 +40,28 @@ export default function RatingSystem() {
       userAgent: navigator.userAgent,
     };
 
-    try {
-      if (CONFIG.ratingEndpoint) {
-        await fetch(CONFIG.ratingEndpoint, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      setSent(true);
-      // Si es positivo (>= 4 estrellas), invita a reseñar en Google Maps
-      if (stars >= 4) setRedirectGoogle(true);
-    } catch (e) {
-      setError("No se pudo enviar. Intenta de nuevo en un momento.");
-    } finally {
-      setSending(false);
+    if (CONFIG.ratingEndpoint) {
+      // Fire-and-forget con timeout 5s — el endpoint Apps Script no devuelve
+      // CORS headers, así que la respuesta es opaca y no necesitamos esperarla.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      fetch(CONFIG.ratingEndpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      })
+        .catch((err) => console.warn("[rating] fetch:", err))
+        .finally(() => clearTimeout(timer));
     }
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {}
+    setSent(true);
+    if (stars >= 4) setRedirectGoogle(true);
+    setSending(false);
   };
 
   const handleGoogleReviewClick = async () => {
@@ -233,7 +243,7 @@ export default function RatingSystem() {
                         Nos encantaría que también la dejaras pública en Google.
                         Nos ayuda a llegar a más comensales.
                       </p>
-                      {loadSession() && (
+                      {isLogged && (
                         <p className="mt-2 text-sm text-[var(--foreground)]/80">
                           Deja una reseña en Google y gana{" "}
                           <span className="font-bold text-[var(--red)]">100 puntos</span>{" "}
@@ -259,7 +269,7 @@ export default function RatingSystem() {
                       </button>
                     </div>
 
-                    {loadSession() && (
+                    {isLogged && (
                       <div className="border-t border-[var(--red)]/20 pt-4">
                         <p className="text-sm text-[var(--foreground)]/80">
                           Síguenos en Instagram y gana <span className="font-bold text-[var(--red)]">100 puntos</span> en tu cuenta de loyalidad.
