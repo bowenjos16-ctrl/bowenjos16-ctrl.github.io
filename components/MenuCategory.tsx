@@ -11,7 +11,7 @@ export default function MenuCategory({
 }: {
   category: MenuCategoryType;
 }) {
-  const showSides = ["cortes", "grill"].includes(category.id);
+  const showSides = category.id === "cortes";
   return (
     <section
       id={category.id}
