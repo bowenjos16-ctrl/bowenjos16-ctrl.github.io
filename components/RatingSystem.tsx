@@ -1,14 +1,17 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Star, Send, Check, Loader2, ExternalLink, Instagram } from "lucide-react";
 import { CONFIG } from "@/lib/config";
-import { loadSession, apiAwardInstagramBonus, apiAwardGoogleReviewBonus } from "@/lib/loyalty";
+import { apiAwardInstagramBonus, apiAwardGoogleReviewBonus } from "@/lib/loyalty";
+import { useLoyalty } from "./LoyaltyProvider";
 
 const STORAGE_KEY = "cp-rating";
 
 export default function RatingSystem() {
+  const { client } = useLoyalty();
+  const isLogged = !!client;
   const [stars, setStars] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState("");
@@ -20,12 +23,6 @@ export default function RatingSystem() {
   const [instagramAwardLoading, setInstagramAwardLoading] = useState(false);
   const [instagramAwarded, setInstagramAwarded] = useState(false);
   const [googleAwarded, setGoogleAwarded] = useState(false);
-  const [isLogged, setIsLogged] = useState(false);
-
-  // Detecta sesión en el cliente (loadSession lee localStorage)
-  useEffect(() => {
-    setIsLogged(!!loadSession());
-  }, [sent]);
 
   const submit = async () => {
     if (stars === 0) return;
@@ -65,12 +62,11 @@ export default function RatingSystem() {
   };
 
   const handleGoogleReviewClick = async () => {
-    const session = loadSession();
     // Open Google review page regardless of login state
     window.open(CONFIG.googleReviewUrl, "_blank", "noopener,noreferrer");
-    if (!session || googleAwarded) return;
+    if (!client || googleAwarded) return;
     try {
-      const res = await apiAwardGoogleReviewBonus(session.client.telefono);
+      const res = await apiAwardGoogleReviewBonus(client.telefono);
       if (res.ok || res.alreadyClaimed) setGoogleAwarded(true);
     } catch (err) {
       console.error("Failed to award Google review bonus:", err);
@@ -78,8 +74,7 @@ export default function RatingSystem() {
   };
 
   const handleInstagramClick = async () => {
-    const session = loadSession();
-    if (!session) {
+    if (!client) {
       // No logged in, just open Instagram
       window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
       return;
@@ -88,7 +83,7 @@ export default function RatingSystem() {
     // User is logged in, try to award bonus points
     setInstagramAwardLoading(true);
     try {
-      const res = await apiAwardInstagramBonus(session.client.telefono);
+      const res = await apiAwardInstagramBonus(client.telefono);
       if (res.ok) {
         setInstagramAwarded(true);
         // Open Instagram
