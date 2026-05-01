@@ -61,6 +61,7 @@ export default function LoyaltyModal() {
     nombre: "",
     telefono: "",
     email: "",
+    cedula: "",
     acepto_terminos: false,
   });
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
@@ -167,12 +168,19 @@ export default function LoyaltyModal() {
       setError("Debes aceptar los términos para continuar.");
       return;
     }
+    const cedulaDigits = regForm.cedula.replace(/\D/g, "");
+    if (cedulaDigits.length !== 10) {
+      setError("La cédula debe tener 10 dígitos.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await apiRegister(regForm);
       if (res.ok && res.client) {
         setClient(res.client);
         setView("dashboard");
+      } else if (res.error === "cedula") {
+        setError("La cédula debe tener 10 dígitos.");
       } else {
         setError("Error al registrarte. Revisa los datos.");
       }
@@ -451,6 +459,22 @@ export default function LoyaltyModal() {
                   />
                   <input
                     required
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d{10}"
+                    maxLength={10}
+                    placeholder="Cédula (10 dígitos)"
+                    value={regForm.cedula}
+                    onChange={(e) =>
+                      setRegForm({
+                        ...regForm,
+                        cedula: e.target.value.replace(/\D/g, "").slice(0, 10),
+                      })
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 focus:border-[var(--red)] focus:outline-none"
+                  />
+                  <input
+                    required
                     type="email"
                     placeholder="Correo electrónico"
                     value={regForm.email}
@@ -637,7 +661,7 @@ export default function LoyaltyModal() {
                     <p className="mb-3">
                       Al registrarte aceptas que{" "}
                       <strong>Corte Piedra</strong> recopile y almacene tu
-                      nombre, teléfono y correo electrónico.
+                      nombre, teléfono, cédula y correo electrónico.
                     </p>
                     <p className="mb-3">
                       <strong>Uso:</strong> tus datos se usarán solamente para

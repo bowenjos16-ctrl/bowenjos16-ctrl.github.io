@@ -5,6 +5,7 @@ export type LoyaltyClient = {
   nombre: string;
   telefono: string;
   email: string;
+  cedula: string;
   fecha_registro: string;
   puntos_actuales: number;
   puntos_totales_historicos: number;
@@ -152,12 +153,14 @@ export async function apiRegister(input: {
   nombre: string;
   telefono: string;
   email: string;
+  cedula: string;
   acepto_terminos: boolean;
 }) {
   return apiPost<{ ok: boolean; client?: LoyaltyClient; error?: string }>({
     action: "register",
     ...input,
     telefono: normalizePhone(input.telefono),
+    cedula: String(input.cedula ?? "").replace(/\D/g, ""),
   });
 }
 
@@ -309,6 +312,7 @@ function demoMock(body: Record<string, unknown>): unknown {
       nombre: String(body.nombre || ""),
       telefono: phone,
       email: String(body.email || ""),
+      cedula: String(body.cedula || ""),
       fecha_registro: new Date().toISOString(),
       puntos_actuales: 0,
       puntos_totales_historicos: 0,

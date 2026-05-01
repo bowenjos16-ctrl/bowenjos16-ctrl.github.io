@@ -65,7 +65,8 @@ function setup() {
   ensureSheet_(ss, SHEETS.CLI, [
     "id", "nombre", "telefono", "email", "fecha_registro",
     "puntos_actuales", "puntos_totales_historicos", "nivel",
-    "acepto_terminos", "fecha_aceptacion", "ultima_acumulacion"
+    "acepto_terminos", "fecha_aceptacion", "ultima_acumulacion",
+    "cedula"
   ]);
   ensureSheet_(ss, SHEETS.TRX, [
     "id", "cliente_id", "telefono", "fecha_hora",
@@ -405,7 +406,9 @@ function handleRating_(data) {
 
 function register_(data) {
   var phone = normalizePhone_(data.telefono);
+  var cedula = String(data.cedula || "").replace(/\D/g, "");
   if (!data.nombre || !phone || !data.email) return { ok: false, error: "missing" };
+  if (!cedula || cedula.length !== 10) return { ok: false, error: "cedula" };
   if (!data.acepto_terminos) return { ok: false, error: "terms" };
 
   var existing = findClientByPhone_(phone);
@@ -418,7 +421,8 @@ function register_(data) {
   sh.appendRow([
     id, String(data.nombre).trim(), phone, String(data.email).trim(), now,
     0, 0, "Bronce",
-    true, now, ""
+    true, now, "",
+    cedula
   ]);
   return { ok: true, client: findClientByPhone_(phone) };
 }
@@ -563,7 +567,8 @@ function clientRowToObj_(r) {
     nivel: r[7],
     acepto_terminos: !!r[8],
     fecha_aceptacion: r[9],
-    ultima_acumulacion: r[10]
+    ultima_acumulacion: r[10],
+    cedula: r[11] ? String(r[11]) : ""
   };
 }
 
@@ -2042,6 +2047,303 @@ function migrarGaleriaActual() {
 }
 
 // =============================================================
+//  AUTOMATIZACION DE EMAILS DE EVENTOS
+// =============================================================
+
+/**
+ * Configura los triggers de eventos:
+ *  1) onEdit instantaneo en la hoja: cuando agregas un evento con active=TRUE
+ *     se envia el correo de anuncio INMEDIATAMENTE (una sola vez).
+ *  2) Cron diario 9 AM: envia recordatorios de eventos que ocurren manana.
+ * Ejecutar UNA vez desde el editor de Apps Script.
+ */
+function installTriggerEventos() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    var name = triggers[i].getHandlerFunction();
+    if (name === "dailyEventosJob" || name === "onEditEventosTrigger") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  // Trigger 1: onEdit instantaneo para anuncios de evento nuevo
+  ScriptApp.newTrigger("onEditEventosTrigger")
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  // Trigger 2: cron diario 9 AM para recordatorios "manana es el evento"
+  ScriptApp.newTrigger("dailyEventosJob")
+    .timeBased()
+    .atHour(9)
+    .everyDays(1)
+    .create();
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      "Triggers de eventos instalados:\n" +
+      " - Anuncio inmediato al marcar active=TRUE en la hoja Eventos.\n" +
+      " - Recordatorio diario a las 9:00 AM para eventos del dia siguiente."
+    );
+  } catch (e) {}
+}
+
+/**
+ * Job diario (9 AM): solo recordatorios "manana es el evento".
+ * Tambien corre verificarNuevosEventos_ como red de seguridad por si
+ * el onEdit trigger fallo o el evento se agrego con el trigger desinstalado.
+ */
+function dailyEventosJob() {
+  verificarNuevosEventos_();   // safety net (idempotente)
+  recordatorioEventoManana_();
+}
+
+/**
+ * Handler del trigger onEdit instalable.
+ * Cuando se edita la hoja Eventos, revisa si hay eventos con active=TRUE
+ * y notificado != TRUE, y envia el email de anuncio inmediatamente.
+ *
+ * Es seguro porque verificarNuevosEventos_ es idempotente:
+ *  - Solo procesa filas con active=TRUE
+ *  - Marca notificado=TRUE despues de enviar
+ *  - Filas ya notificadas se saltan
+ */
+function onEditEventosTrigger(e) {
+  try {
+    if (!e || !e.range) return;
+    var sh = e.range.getSheet();
+    if (!sh || sh.getName() !== SHEETS.EVENTOS) return;
+    // Pequena espera para que el usuario termine de tipear la fila completa
+    // (si setea active=TRUE despues de llenar lo demas, no afecta).
+    Utilities.sleep(1500);
+    verificarNuevosEventos_();
+  } catch (err) {
+    Logger.log("Error onEditEventosTrigger: " + err);
+  }
+}
+
+/**
+ * Escanea la hoja Eventos buscando filas con notificado != TRUE.
+ * Para cada una: envia email de anuncio a todos los clientes y marca notificado=TRUE.
+ */
+function verificarNuevosEventos_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.EVENTOS);
+  if (!sh || sh.getLastRow() < 2) return;
+
+  // Encontrar o crear columna "notificado"
+  var lastCol = sh.getLastColumn();
+  var headerRow = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var headers = headerRow.map(function(h) { return String(h).trim(); });
+  var notifColIdx = headers.indexOf("notificado"); // 0-based
+  if (notifColIdx < 0) {
+    notifColIdx = lastCol; // 0-based index de la nueva columna
+    sh.getRange(1, lastCol + 1).setValue("notificado");
+    lastCol = lastCol + 1;
+  }
+  var notifCol1 = notifColIdx + 1; // 1-based para getRange
+
+  var data = sh.getRange(2, 1, sh.getLastRow() - 1, lastCol).getValues();
+  var clients = getAllActiveClients_();
+  if (clients.length === 0) return;
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    // Construir objeto evento desde headers
+    var evento = {};
+    for (var h = 0; h < headers.length; h++) {
+      evento[headers[h]] = row[h];
+    }
+    var notifVal = row[notifColIdx];
+    if (!truthy_(evento.active)) continue;
+    if (truthy_(notifVal)) continue; // ya notificado
+
+    try {
+      enviarEmailAnuncioEvento_(evento, clients);
+      sh.getRange(i + 2, notifCol1).setValue(true);
+      SpreadsheetApp.flush();
+    } catch (err) {
+      Logger.log("Error notificando evento " + evento.id + ": " + err);
+    }
+  }
+}
+
+/**
+ * Busca eventos de tipo "fecha" que ocurren manana y envia recordatorio a todos los clientes.
+ */
+function recordatorioEventoManana_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var tomorrowISO = Utilities.formatDate(tomorrow, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  var eventos = readSheet_(ss, SHEETS.EVENTOS);
+  var clients = getAllActiveClients_();
+  if (clients.length === 0) return;
+
+  var manana = eventos.filter(function(e) {
+    if (!truthy_(e.active)) return false;
+    if (String(e.tipo || "").toLowerCase().trim() !== "fecha") return false;
+    return formatDateISO_(e.fecha) === tomorrowISO;
+  });
+
+  manana.forEach(function(evento) {
+    try {
+      enviarEmailRecordatorio_(evento, clients);
+    } catch (err) {
+      Logger.log("Error recordatorio evento " + evento.id + ": " + err);
+    }
+  });
+}
+
+/**
+ * Retorna todos los clientes que tienen email valido registrado.
+ */
+function getAllActiveClients_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.CLI);
+  if (!sh || sh.getLastRow() < 2) return [];
+  var rows = sh.getDataRange().getValues();
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var email = String(rows[i][3] || "").trim();
+    if (email && email.indexOf("@") > 0) {
+      result.push({ nombre: String(rows[i][1] || "Cliente"), email: email });
+    }
+  }
+  return result;
+}
+
+/**
+ * Envia email de anuncio de nuevo evento a la lista de clientes.
+ */
+function enviarEmailAnuncioEvento_(evento, clients) {
+  var cfg = readConfig_();
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var titulo = String(evento.titulo || "Nuevo Evento");
+  var subtitulo = String(evento.subtitulo || "");
+  var fecha = formatFechaEventoTexto_(evento);
+  var hora = formatHoraEvento_(evento);
+  var subject = "Nuevo evento: " + titulo + " - " + nombre;
+  var html = buildEmailEvento_(nombre, titulo, subtitulo, fecha, hora, "Nuevo evento", "#c73838");
+  for (var i = 0; i < clients.length; i++) {
+    try {
+      MailApp.sendEmail({ to: clients[i].email, subject: subject, htmlBody: html, name: nombre });
+    } catch (e) {
+      Logger.log("Error email anuncio a " + clients[i].email + ": " + e);
+    }
+  }
+}
+
+/**
+ * Envia email de recordatorio (el evento es manana) a la lista de clientes.
+ */
+function enviarEmailRecordatorio_(evento, clients) {
+  var cfg = readConfig_();
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var titulo = String(evento.titulo || "Evento");
+  var subtitulo = String(evento.subtitulo || "");
+  var fecha = formatFechaEventoTexto_(evento);
+  var hora = formatHoraEvento_(evento);
+  var subject = "Manana: " + titulo + " - " + nombre;
+  var html = buildEmailEvento_(nombre, titulo, subtitulo, fecha, hora, "Recordatorio: manana es el evento", "#c9a35a");
+  for (var i = 0; i < clients.length; i++) {
+    try {
+      MailApp.sendEmail({ to: clients[i].email, subject: subject, htmlBody: html, name: nombre });
+    } catch (e) {
+      Logger.log("Error email recordatorio a " + clients[i].email + ": " + e);
+    }
+  }
+}
+
+/**
+ * Construye el HTML del email de evento. Reutilizado por anuncio y recordatorio.
+ */
+function buildEmailEvento_(restaurante, titulo, subtitulo, fecha, hora, badge, accentColor) {
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +
+    '<body style="margin:0;padding:0;background:#0a0a0a;font-family:Georgia,serif;">' +
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a0a;padding:40px 20px;">' +
+    '<tr><td align="center">' +
+    '<table role="presentation" width="520" cellspacing="0" cellpadding="0" style="max-width:520px;background:#000;border:1px solid rgba(200,32,46,0.3);border-radius:20px;overflow:hidden;">' +
+    '<tr><td style="padding:40px 30px 20px;text-align:center;">' +
+    '<p style="color:' + accentColor + ';font-size:11px;letter-spacing:0.4em;text-transform:uppercase;margin:0 0 6px;font-family:Arial,sans-serif;">' + badge + '</p>' +
+    '<h1 style="color:#fff;font-size:26px;margin:0 0 8px;font-weight:900;">' + titulo + '</h1>' +
+    (subtitulo ? '<p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0;">' + subtitulo + '</p>' : '') +
+    '</td></tr>' +
+    '<tr><td style="padding:20px 30px;">' +
+    '<div style="background:linear-gradient(135deg,rgba(200,32,46,0.12),rgba(139,22,33,0.08));border:1px solid rgba(200,32,46,0.3);border-radius:14px;padding:24px 20px;text-align:center;">' +
+    '<p style="color:rgba(255,255,255,0.5);font-size:11px;letter-spacing:0.3em;text-transform:uppercase;margin:0 0 8px;font-family:Arial,sans-serif;">Cuando</p>' +
+    '<p style="color:#fff;font-size:20px;font-weight:700;margin:0 0 4px;font-family:Arial,sans-serif;">' + fecha + '</p>' +
+    (hora ? '<p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0;font-family:Arial,sans-serif;">' + hora + '</p>' : '') +
+    '</div></td></tr>' +
+    '<tr><td style="padding:10px 30px 36px;text-align:center;">' +
+    '<p style="color:rgba(255,255,255,0.7);font-size:14px;line-height:1.6;margin:0;font-family:Arial,sans-serif;">Te esperamos. Reserva tu mesa antes de que se llene.</p>' +
+    '<p style="color:rgba(255,255,255,0.4);font-size:11px;line-height:1.5;margin:16px 0 0;font-family:Arial,sans-serif;">Si no deseas recibir estos correos, comunicate con nosotros.</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:20px 30px;border-top:1px solid rgba(255,255,255,0.08);text-align:center;">' +
+    '<p style="color:rgba(255,255,255,0.3);font-size:10px;letter-spacing:0.2em;text-transform:uppercase;margin:0;font-family:Arial,sans-serif;">' + restaurante + ' · Experiencia Gourmet en Cada Bocado</p>' +
+    '</td></tr></table></td></tr></table></body></html>';
+}
+
+/**
+ * Devuelve texto legible de fecha o dia de semana del evento.
+ */
+function formatFechaEventoTexto_(evento) {
+  var tipo = String(evento.tipo || "").toLowerCase().trim();
+  if (tipo === "fecha") {
+    var iso = formatDateISO_(evento.fecha);
+    // Parsear como fecha local (yyyy-MM-dd) evitando desfase UTC
+    var parts = iso.split("-");
+    if (parts.length === 3) {
+      var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd 'de' MMMM 'de' yyyy");
+      }
+    }
+    return iso;
+  }
+  var dias = ["Domingos", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabados"];
+  var n = parseDayOfWeek_(evento.dia_semana);
+  return n >= 0 ? "Cada " + dias[n] : String(evento.dia_semana || "");
+}
+
+/**
+ * Devuelve texto de horario del evento (ej: "20:00 - 24:00").
+ */
+function formatHoraEvento_(evento) {
+  var ini = Number(evento.hora_inicio || 0);
+  var fin = Number(evento.hora_fin || 0);
+  if (!ini && !fin) return "";
+  function pad(h) { return (h < 10 ? "0" : "") + h + ":00"; }
+  return pad(ini) + " - " + pad(fin);
+}
+
+/**
+ * Funcion de prueba: envia un email de anuncio de evento al email del dueno.
+ * Ejecutar manualmente desde el editor para verificar que los emails llegan bien.
+ */
+function testEmailEvento() {
+  var cfg = readConfig_();
+  var recipients = String(cfg.restaurante_email_dueno || "")
+    .split(",")
+    .map(function(s) { return s.trim(); })
+    .filter(function(s) { return !!s; });
+  if (recipients.length === 0) {
+    Logger.log("No hay email de dueno configurado en la hoja Configuracion.");
+    return;
+  }
+  var eventoTest = {
+    tipo: "fecha", fecha: new Date(), titulo: "Noche de Gala TEST",
+    subtitulo: "Cena especial con musica en vivo", hora_inicio: 20, hora_fin: 23,
+    icon: "music", color: "#c73838", active: true
+  };
+  var clients = recipients.map(function(e) { return { nombre: "Dueno", email: e }; });
+  enviarEmailAnuncioEvento_(eventoTest, clients);
+  Logger.log("Email de prueba enviado a: " + recipients.join(", "));
+}
+
+// =============================================================
 //  README (pasos de setup)
 // =============================================================
 // 1. Crea un Google Sheet vacio
@@ -2052,10 +2354,14 @@ function migrarGaleriaActual() {
 //    - restaurante_email_dueno (emails separados por coma)
 //    - restaurante_lat, restaurante_lng (coords GPS reales del local)
 //    - radio_metros (50 recomendado)
-// 6. Ejecuta installTrigger() -> cron diario 6 AM
-// 7. Opcional: ejecuta testGeneratePassword() para probar el email
-// 8. Implementar -> Nueva implementacion -> Web app:
+// 6. Ejecuta installTrigger() -> cron diario 6 AM (contrasena del dia)
+// 7. Ejecuta installTriggerEventos() -> instala 2 triggers:
+//    - Anuncio inmediato cuando agregas un evento con active=TRUE
+//    - Cron diario 9 AM con recordatorios "manana es el evento"
+// 8. Opcional: ejecuta testGeneratePassword() para probar el email de contrasena
+// 9. Opcional: ejecuta testEmailEvento() para probar el email de eventos
+// 10. Implementar -> Nueva implementacion -> Web app:
 //    - Ejecutar como: Yo
 //    - Quien tiene acceso: Cualquier usuario
-// 9. Copia la URL que termina en /exec
+// 11. Copia la URL que termina en /exec
 // 10. Pegala en lib/config.ts -> loyaltyApi
