@@ -16,6 +16,9 @@ const PRIZES = [
 ];
 const SEG = 360 / PRIZES.length;
 const STORAGE_KEY = "corte-piedra-spin";
+const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+
+type SpinRecord = (typeof PRIZES)[number] & { timestamp?: number };
 
 export default function SpinWheel() {
   const [open, setOpen] = useState(false);
@@ -24,19 +27,28 @@ export default function SpinWheel() {
   const [won, setWon] = useState<(typeof PRIZES)[number] | null>(null);
   const [copied, setCopied] = useState(false);
   const [already, setAlready] = useState(false);
+  const [daysLeft, setDaysLeft] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const saved = typeof window !== "undefined"
       ? localStorage.getItem(STORAGE_KEY)
       : null;
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setWon(data);
-        setAlready(true);
-      } catch {}
-    }
+    if (!saved) return;
+    try {
+      const data = JSON.parse(saved) as SpinRecord;
+      // Compatibilidad: registros viejos sin timestamp se asumen vencidos.
+      const ts = typeof data.timestamp === "number" ? data.timestamp : 0;
+      const age = Date.now() - ts;
+      if (age >= COOLDOWN_MS) {
+        // Cooldown vencido: limpiar para permitir nueva tirada.
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      setWon({ label: data.label, value: data.value, color: data.color });
+      setAlready(true);
+      setDaysLeft(Math.ceil((COOLDOWN_MS - age) / (24 * 60 * 60 * 1000)));
+    } catch {}
   }, []);
 
   const spin = () => {
@@ -50,8 +62,10 @@ export default function SpinWheel() {
       const prize = PRIZES[idx];
       setWon(prize);
       setSpinning(false);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(prize));
+      const record: SpinRecord = { ...prize, timestamp: Date.now() };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
       setAlready(true);
+      setDaysLeft(30);
     }, 5000);
   };
 
@@ -121,8 +135,8 @@ export default function SpinWheel() {
               </h3>
               <p className="mt-1 text-sm text-[var(--foreground)]/60">
                 {already
-                  ? "Usa tu cupón al pagar en el restaurante"
-                  : "Una sola tirada gratis por visita"}
+                  ? `Usa tu cupón al pagar · Próximo giro en ${daysLeft} día${daysLeft === 1 ? "" : "s"}`
+                  : "Una tirada gratis cada 30 días"}
               </p>
 
               {/* Wheel */}
