@@ -244,6 +244,34 @@ export async function apiAwardInstagramBonus(telefono: string) {
   });
 }
 
+export async function apiAwardGoogleReviewBonus(telefono: string) {
+  return apiPost<{
+    ok: boolean;
+    pointsAwarded?: number;
+    client?: LoyaltyClient;
+    error?: string;
+    alreadyClaimed?: boolean;
+  }>({
+    action: "awardGoogleReviewBonus",
+    telefono: normalizePhone(telefono),
+  });
+}
+
+export async function apiAwardGamePoints(telefono: string, prizeCode: string) {
+  return apiPost<{
+    ok: boolean;
+    pointsAwarded?: number;
+    prizeCode?: string;
+    client?: LoyaltyClient;
+    error?: string;
+    hoursLeft?: number;
+  }>({
+    action: "awardGamePoints",
+    telefono: normalizePhone(telefono),
+    prizeCode,
+  });
+}
+
 // ──────────────────────────────────────────────────────────
 // Session (localStorage)
 // ──────────────────────────────────────────────────────────

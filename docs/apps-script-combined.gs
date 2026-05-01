@@ -288,6 +288,8 @@ function doPost(e) {
       case "redeem":     return json_(withLock_(function () { return redeem_(data); }));
       case "getHistory": return json_(getHistory_(data));
       case "awardInstagramBonus": return json_(withLock_(function () { return awardInstagramBonus_(data); }));
+      case "awardGoogleReviewBonus": return json_(withLock_(function () { return awardGoogleReviewBonus_(data); }));
+      case "awardGamePoints": return json_(withLock_(function () { return awardGamePoints_(data); }));
       case "getMenu":    return json_(getMenu_(data.kind || "regular"));
       case "getEvents":  return json_(getEvents_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
       case "getGallery": return json_(getGallery_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
@@ -856,6 +858,134 @@ function awardInstagramBonus_(data) {
   return {
     ok: true,
     pointsAwarded: pointsBonus,
+    client: findClientByPhone_(phone)
+  };
+}
+
+/**
+ * Otorga 100 puntos por dejar resena en Google (una sola vez por usuario).
+ * Marker en transacciones: GOOGLE_REVIEW.
+ */
+function awardGoogleReviewBonus_(data) {
+  var phone = normalizePhone_(data.telefono);
+  if (!phone) return { ok: false, error: "missing" };
+
+  if (isDuplicateRequest_(data.idempotencyKey)) {
+    return { ok: true, duplicate: true, message: "Bonus ya procesado" };
+  }
+
+  var c = findClientByPhone_(phone);
+  if (!c) return { ok: false, error: "not_found" };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var trx = ss.getSheetByName(SHEETS.TRX);
+  if (!trx) return { ok: false, error: "no_transactions_sheet" };
+
+  var trxRows = trx.getDataRange().getValues();
+  for (var i = 1; i < trxRows.length; i++) {
+    if (normalizePhone_(trxRows[i][2]) === phone && String(trxRows[i][5] || "") === "GOOGLE_REVIEW") {
+      return { ok: false, error: "already_claimed", alreadyClaimed: true };
+    }
+  }
+
+  var pointsBonus = 100;
+  var cli = ss.getSheetByName(SHEETS.CLI);
+  var rows = cli.getDataRange().getValues();
+  var cfg = readConfig_();
+  for (var j = 1; j < rows.length; j++) {
+    if (normalizePhone_(rows[j][2]) === phone) {
+      var rowIdx = j + 1;
+      var newCurrent = Number(rows[j][5] || 0) + pointsBonus;
+      var newTotal = Number(rows[j][6] || 0) + pointsBonus;
+      var nivel = computeLevel_(newTotal, cfg);
+      cli.getRange(rowIdx, 6).setValue(newCurrent);
+      cli.getRange(rowIdx, 7).setValue(newTotal);
+      cli.getRange(rowIdx, 8).setValue(nivel);
+      break;
+    }
+  }
+
+  trx.appendRow([
+    Utilities.getUuid(), c.id, phone, new Date(),
+    pointsBonus, "GOOGLE_REVIEW", ""
+  ]);
+
+  return {
+    ok: true,
+    pointsAwarded: pointsBonus,
+    client: findClientByPhone_(phone)
+  };
+}
+
+/**
+ * Otorga puntos ganados en juegos (Rasca y gana). Whitelist de codigos
+ * autoriza solo SCRATCH50PTS=50 y SCRATCH100PTS=100. Marker en transacciones:
+ * GAME:<prizeCode>. Limita: una vez cada cooldown_horas (alineado al lock
+ * cliente del juego, pero validado tambien server-side).
+ */
+function awardGamePoints_(data) {
+  var phone = normalizePhone_(data.telefono);
+  var prizeCode = String(data.prizeCode || "").trim().toUpperCase();
+  if (!phone) return { ok: false, error: "missing" };
+
+  var GAME_PRIZES = {
+    "SCRATCH50PTS": 50,
+    "SCRATCH100PTS": 100
+  };
+  var pointsBonus = GAME_PRIZES[prizeCode];
+  if (!pointsBonus) return { ok: false, error: "invalid_prize" };
+
+  if (isDuplicateRequest_(data.idempotencyKey)) {
+    return { ok: true, duplicate: true, message: "Premio ya procesado" };
+  }
+
+  var c = findClientByPhone_(phone);
+  if (!c) return { ok: false, error: "not_found" };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var trx = ss.getSheetByName(SHEETS.TRX);
+  if (!trx) return { ok: false, error: "no_transactions_sheet" };
+
+  // Limite: 1 premio de juego cada cooldown_horas por usuario.
+  var cfg = readConfig_();
+  var cooldownMs = Number(cfg.cooldown_horas || 24) * 36e5;
+  var trxRows = trx.getDataRange().getValues();
+  var nowMs = Date.now();
+  for (var i = 1; i < trxRows.length; i++) {
+    if (normalizePhone_(trxRows[i][2]) !== phone) continue;
+    var marker = String(trxRows[i][5] || "");
+    if (marker.indexOf("GAME:") !== 0) continue;
+    var when = trxRows[i][3];
+    var whenMs = when instanceof Date ? when.getTime() : new Date(when).getTime();
+    if (!isNaN(whenMs) && (nowMs - whenMs) < cooldownMs) {
+      return { ok: false, error: "cooldown", hoursLeft: Math.ceil((cooldownMs - (nowMs - whenMs)) / 36e5) };
+    }
+  }
+
+  var cli = ss.getSheetByName(SHEETS.CLI);
+  var rows = cli.getDataRange().getValues();
+  for (var j = 1; j < rows.length; j++) {
+    if (normalizePhone_(rows[j][2]) === phone) {
+      var rowIdx = j + 1;
+      var newCurrent = Number(rows[j][5] || 0) + pointsBonus;
+      var newTotal = Number(rows[j][6] || 0) + pointsBonus;
+      var nivel = computeLevel_(newTotal, cfg);
+      cli.getRange(rowIdx, 6).setValue(newCurrent);
+      cli.getRange(rowIdx, 7).setValue(newTotal);
+      cli.getRange(rowIdx, 8).setValue(nivel);
+      break;
+    }
+  }
+
+  trx.appendRow([
+    Utilities.getUuid(), c.id, phone, new Date(),
+    pointsBonus, "GAME:" + prizeCode, ""
+  ]);
+
+  return {
+    ok: true,
+    pointsAwarded: pointsBonus,
+    prizeCode: prizeCode,
     client: findClientByPhone_(phone)
   };
 }

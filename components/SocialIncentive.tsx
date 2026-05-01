@@ -1,10 +1,36 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Instagram, Sparkles, ArrowRight } from "lucide-react";
+import { Instagram, Sparkles, ArrowRight, Check, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { CONFIG } from "@/lib/config";
+import { loadSession, apiAwardInstagramBonus } from "@/lib/loyalty";
 
 export default function SocialIncentive() {
+  const [loading, setLoading] = useState(false);
+  const [awarded, setAwarded] = useState(false);
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    const session = loadSession();
+    if (!session) {
+      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await apiAwardInstagramBonus(session.client.telefono);
+      if (res.ok || res.alreadyClaimed) {
+        setAwarded(true);
+      }
+    } catch (err) {
+      console.error("Failed to award Instagram bonus:", err);
+    } finally {
+      setLoading(false);
+      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
     <section className="relative py-16">
       <div className="mx-auto max-w-4xl px-6">
@@ -12,6 +38,7 @@ export default function SocialIncentive() {
           href={CONFIG.instagramUrl}
           target="_blank"
           rel="noreferrer"
+          onClick={handleClick}
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
@@ -40,16 +67,31 @@ export default function SocialIncentive() {
             <p className="mt-3 max-w-xl mx-auto text-balance text-[var(--foreground)]/80">
               Muestra que nos sigues en{" "}
               <span className="font-bold text-white">@{CONFIG.instagram}</span>{" "}
-              al pedir y recibe{" "}
-              <span className="font-bold text-[white]">
-                una entrada gratis
-              </span>{" "}
-              de cortesía.
+              y gana{" "}
+              <span className="font-bold text-[white]">100 puntos</span>{" "}
+              en tu cuenta de loyalidad.
+            </p>
+            <p className="mt-2 text-xs text-white/50">
+              Inicia sesión para acumular los puntos · 1 vez por persona
             </p>
 
             <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-8 py-3 text-sm font-bold tracking-widest text-[#833AB4] uppercase transition-transform group-hover:scale-105">
-              Seguir en Instagram
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Acreditando...
+                </>
+              ) : awarded ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  ¡Bonus agregado!
+                </>
+              ) : (
+                <>
+                  Seguir en Instagram
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </>
+              )}
             </div>
           </div>
         </motion.a>

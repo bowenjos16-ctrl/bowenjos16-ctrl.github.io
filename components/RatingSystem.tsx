@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { Star, Send, Check, Loader2, ExternalLink, Instagram } from "lucide-react";
 import { CONFIG } from "@/lib/config";
-import { loadSession, apiAwardInstagramBonus } from "@/lib/loyalty";
+import { loadSession, apiAwardInstagramBonus, apiAwardGoogleReviewBonus } from "@/lib/loyalty";
 
 const STORAGE_KEY = "cp-rating";
 
@@ -19,6 +19,7 @@ export default function RatingSystem() {
   const [redirectGoogle, setRedirectGoogle] = useState(false);
   const [instagramAwardLoading, setInstagramAwardLoading] = useState(false);
   const [instagramAwarded, setInstagramAwarded] = useState(false);
+  const [googleAwarded, setGoogleAwarded] = useState(false);
 
   const submit = async () => {
     if (stars === 0) return;
@@ -50,6 +51,19 @@ export default function RatingSystem() {
       setError("No se pudo enviar. Intenta de nuevo en un momento.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleGoogleReviewClick = async () => {
+    const session = loadSession();
+    // Open Google review page regardless of login state
+    window.open(CONFIG.googleReviewUrl, "_blank", "noopener,noreferrer");
+    if (!session || googleAwarded) return;
+    try {
+      const res = await apiAwardGoogleReviewBonus(session.client.telefono);
+      if (res.ok || res.alreadyClaimed) setGoogleAwarded(true);
+    } catch (err) {
+      console.error("Failed to award Google review bonus:", err);
     }
   };
 
@@ -219,15 +233,30 @@ export default function RatingSystem() {
                         Nos encantaría que también la dejaras pública en Google.
                         Nos ayuda a llegar a más comensales.
                       </p>
-                      <a
-                        href={CONFIG.googleReviewUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#4285F4] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105"
+                      {loadSession() && (
+                        <p className="mt-2 text-sm text-[var(--foreground)]/80">
+                          Deja una reseña en Google y gana{" "}
+                          <span className="font-bold text-[var(--red)]">100 puntos</span>{" "}
+                          en tu cuenta de loyalidad.
+                        </p>
+                      )}
+                      <button
+                        onClick={handleGoogleReviewClick}
+                        disabled={googleAwarded}
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#4285F4] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105 disabled:opacity-60"
                       >
-                        Dejar reseña en Google
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
+                        {googleAwarded ? (
+                          <>
+                            <Check className="h-3.5 w-3.5" />
+                            Bonus agregado
+                          </>
+                        ) : (
+                          <>
+                            Dejar reseña en Google
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     {loadSession() && (

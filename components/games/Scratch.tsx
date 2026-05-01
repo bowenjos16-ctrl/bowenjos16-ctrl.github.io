@@ -2,7 +2,8 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Gift } from "lucide-react";
+import { Sparkles, Gift, Check, Loader2 } from "lucide-react";
+import { loadSession, apiAwardGamePoints } from "@/lib/loyalty";
 
 const PRIZES = [
   { label: "5% descuento", code: "SCRATCH5", weight: 3 },
@@ -13,6 +14,11 @@ const PRIZES = [
   { label: "$2.50 en consumo", code: "SCRATCH250", weight: 2 },
   { label: "Más suerte a la próxima", code: "TRYAGAIN", weight: 3 },
 ];
+
+const POINTS_PRIZES: Record<string, number> = {
+  SCRATCH50PTS: 50,
+  SCRATCH100PTS: 100,
+};
 
 function pickPrize() {
   const total = PRIZES.reduce((s, p) => s + p.weight, 0);
@@ -32,6 +38,24 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
   const [revealed, setRevealed] = useState(false);
   const [percent, setPercent] = useState(0);
   const scratching = useRef(false);
+  const [awardState, setAwardState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const claimedRef = useRef(false);
+
+  useEffect(() => {
+    if (!revealed) return;
+    const isPointsPrize = prize.code in POINTS_PRIZES;
+    if (!isPointsPrize) return;
+    if (claimedRef.current) return;
+    const session = loadSession();
+    if (!session) return;
+    claimedRef.current = true;
+    setAwardState("loading");
+    apiAwardGamePoints(session.client.telefono, prize.code)
+      .then((res) => {
+        setAwardState(res.ok || res.error === "cooldown" ? "ok" : "fail");
+      })
+      .catch(() => setAwardState("fail"));
+  }, [revealed, prize.code]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -128,13 +152,42 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
 
       <AnimatePresence>
         {revealed && (
-          <motion.p
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 text-center text-[11px] tracking-wider text-white/60 uppercase"
+            className="mt-4 space-y-2 text-center"
           >
-            Muestra este c\u00f3digo al mesero al pagar
-          </motion.p>
+            {prize.code in POINTS_PRIZES ? (
+              <>
+                {awardState === "loading" && (
+                  <p className="inline-flex items-center gap-1.5 text-[11px] tracking-wider text-white/70 uppercase">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Acreditando puntos...
+                  </p>
+                )}
+                {awardState === "ok" && (
+                  <p className="inline-flex items-center gap-1.5 text-[11px] tracking-wider text-emerald-300 uppercase">
+                    <Check className="h-3.5 w-3.5" />
+                    {POINTS_PRIZES[prize.code]} puntos acreditados a tu cuenta
+                  </p>
+                )}
+                {awardState === "fail" && (
+                  <p className="text-[11px] tracking-wider text-amber-300 uppercase">
+                    No se pudieron acreditar los puntos. Intenta más tarde.
+                  </p>
+                )}
+                {awardState === "idle" && (
+                  <p className="text-[11px] tracking-wider text-white/60 uppercase">
+                    Inicia sesión para acreditar tus puntos
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-[11px] tracking-wider text-white/60 uppercase">
+                Muestra este código al mesero al pagar
+              </p>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
 
