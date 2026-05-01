@@ -2,13 +2,17 @@
 
 import { motion } from "framer-motion";
 import type { MenuSection as MenuSectionType } from "@/lib/menu-data";
+import { SIDES_NOTE } from "@/lib/menu-data";
 import MenuItemCard from "./MenuItemCard";
+
+const SECTIONS_WITH_SIDES = ["lomo-fino", "grill-simple"];
 
 export default function MenuSection({
   section,
 }: {
   section: MenuSectionType;
 }) {
+  const showSides = SECTIONS_WITH_SIDES.includes(section.id);
   return (
     <div className="relative mb-12">
       <motion.h3
@@ -43,6 +47,22 @@ export default function MenuSection({
         >
           {section.note}
         </motion.p>
+      )}
+      {showSides && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="red-border mt-6 rounded-2xl p-5 text-center"
+        >
+          <p className="font-serif text-xs tracking-[0.3em] text-[var(--red)] uppercase">
+            Incluye · Guarniciones (elige 2)
+          </p>
+          <p className="mt-2 text-sm text-[var(--foreground)]/70">
+            {SIDES_NOTE}
+          </p>
+        </motion.div>
       )}
     </div>
   );
