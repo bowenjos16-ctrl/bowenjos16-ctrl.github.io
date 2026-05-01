@@ -380,26 +380,88 @@ function handleRating_(data) {
       .split(",")
       .map(function (s) { return s.trim(); })
       .filter(function (s) { return !!s; });
-    var stars = data.stars;
-    var subject = "Nueva calificacion: " + stars + "/5 - " + cfg.restaurante_nombre;
-    var body =
-      "Estrellas: " + stars + "/5\n" +
-      "Nombre: " + (data.name || "Anonimo") + "\n" +
-      "Comentario: " + (data.comment || "(sin comentario)") + "\n" +
-      "Fecha: " + new Date().toLocaleString("es-EC") + "\n\n" +
-      (stars >= 4 ? "Calificacion positiva - invitado a Google Reviews."
-       : stars <= 2 ? "BAJA. Contacta al cliente."
-       : "Neutra.") +
-      "\n\n-- Bot Menu Corte Piedra";
+    var stars = Number(data.stars) || 0;
+    var fechaStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm");
+    var classification =
+      stars >= 4 ? { label: "Positiva", note: "Cliente invitado a publicar reseña en Google.", color: "#16a34a" }
+      : stars <= 2 ? { label: "Crítica", note: "Sugerimos contactar al cliente para recuperar la experiencia.", color: "#dc2626" }
+      : { label: "Neutra", note: "Sin acción requerida.", color: "#ca8a04" };
+    var starsVisual = "";
+    for (var k = 0; k < 5; k++) starsVisual += k < stars ? "★" : "☆";
+
+    var subject = "[" + cfg.restaurante_nombre + "] Calificación " + stars + "/5 — " + classification.label;
+
+    var nombre = (data.name || "Anónimo").toString();
+    var comentario = (data.comment || "(sin comentario)").toString();
+
+    // Plain-text fallback (clientes sin HTML)
+    var bodyPlain =
+      cfg.restaurante_nombre + " · Reporte de calificación\n" +
+      "──────────────────────────────────────\n" +
+      "Calificación:  " + starsVisual + "  (" + stars + "/5)\n" +
+      "Clasificación: " + classification.label + "\n" +
+      "Cliente:       " + nombre + "\n" +
+      "Fecha:         " + fechaStr + "\n\n" +
+      "Comentario:\n" + comentario + "\n\n" +
+      classification.note + "\n\n" +
+      "Este es un reporte automático generado por el sistema de gestión de " + cfg.restaurante_nombre + ".";
+
+    var bodyHtml =
+      '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;color:#1a1a1a;">' +
+        '<div style="background:#0d0d0d;color:#ffffff;padding:24px 28px;border-radius:8px 8px 0 0;">' +
+          '<div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#c8202e;font-weight:600;">' +
+            (cfg.restaurante_nombre || "Restaurante") +
+          '</div>' +
+          '<div style="font-size:20px;font-weight:600;margin-top:6px;">Reporte de calificación</div>' +
+          '<div style="font-size:13px;color:#a1a1a1;margin-top:4px;">' + fechaStr + '</div>' +
+        '</div>' +
+        '<div style="border:1px solid #e5e5e5;border-top:0;padding:28px;border-radius:0 0 8px 8px;">' +
+          '<div style="font-size:13px;color:#666;letter-spacing:0.08em;text-transform:uppercase;">Calificación</div>' +
+          '<div style="margin-top:6px;font-size:28px;color:#c8202e;letter-spacing:2px;">' + starsVisual + '</div>' +
+          '<div style="font-size:14px;color:#666;margin-top:2px;">' + stars + ' de 5</div>' +
+          '<div style="display:inline-block;margin-top:14px;padding:4px 12px;border-radius:999px;background:' + classification.color + ';color:#ffffff;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;">' +
+            classification.label +
+          '</div>' +
+          '<table style="width:100%;border-collapse:collapse;margin-top:24px;font-size:14px;">' +
+            '<tr><td style="padding:8px 0;color:#666;width:110px;">Cliente</td><td style="padding:8px 0;color:#1a1a1a;font-weight:500;">' + escapeHtml_(nombre) + '</td></tr>' +
+            '<tr><td style="padding:8px 0;color:#666;border-top:1px solid #f0f0f0;">Fecha</td><td style="padding:8px 0;color:#1a1a1a;border-top:1px solid #f0f0f0;">' + fechaStr + '</td></tr>' +
+          '</table>' +
+          '<div style="margin-top:20px;padding:16px;background:#f7f7f7;border-left:3px solid #c8202e;border-radius:4px;">' +
+            '<div style="font-size:11px;color:#666;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;">Comentario</div>' +
+            '<div style="margin-top:8px;font-size:14px;color:#1a1a1a;line-height:1.5;white-space:pre-wrap;">' + escapeHtml_(comentario) + '</div>' +
+          '</div>' +
+          '<div style="margin-top:20px;padding:14px 16px;background:' + classification.color + '14;border:1px solid ' + classification.color + '40;border-radius:6px;font-size:13px;color:#1a1a1a;">' +
+            '<strong style="color:' + classification.color + ';">Acción sugerida:</strong> ' + classification.note +
+          '</div>' +
+          '<div style="margin-top:28px;padding-top:16px;border-top:1px solid #e5e5e5;font-size:11px;color:#999;letter-spacing:0.04em;">' +
+            'Reporte automático · Sistema de gestión ' + (cfg.restaurante_nombre || "") +
+          '</div>' +
+        '</div>' +
+      '</div>';
 
     for (var i = 0; i < recipients.length; i++) {
-      MailApp.sendEmail(recipients[i], subject, body);
+      MailApp.sendEmail({
+        to: recipients[i],
+        subject: subject,
+        body: bodyPlain,
+        htmlBody: bodyHtml,
+        name: cfg.restaurante_nombre || "Corte Piedra"
+      });
     }
 
     return json_({ ok: true });
   } catch (e) {
     return json_({ ok: false, error: String(e) });
   }
+}
+
+function escapeHtml_(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // =============================================================
