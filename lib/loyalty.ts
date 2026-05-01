@@ -47,8 +47,8 @@ export const LOYALTY_STORAGE_KEY = "cp-loyalty-session";
 // Utils
 // ──────────────────────────────────────────────────────────
 
-export function normalizePhone(p: string): string {
-  return p.replace(/\D/g, "").replace(/^0/, "593");
+export function normalizePhone(p: string | number): string {
+  return String(p ?? "").replace(/\D/g, "").replace(/^0/, "593");
 }
 
 /** Haversine — distancia en metros entre dos puntos GPS */
