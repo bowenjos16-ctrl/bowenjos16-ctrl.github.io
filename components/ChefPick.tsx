@@ -237,25 +237,25 @@ export default function ChefPick() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpen(null)}
-            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black backdrop-blur-md sm:bg-black/95 sm:p-4"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-4xl"
+              className="relative flex h-full w-full items-center justify-center sm:h-auto sm:max-w-4xl"
             >
               <button
                 onClick={() => setOpen(null)}
-                className="absolute -top-12 right-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white/80 hover:bg-white/10"
+                className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white/80 backdrop-blur hover:bg-white/10 sm:-top-12 sm:right-0 sm:bg-transparent"
                 aria-label="Cerrar"
               >
                 <X className="h-5 w-5" />
               </button>
 
               {open.type === "image" ? (
-                <div className="relative aspect-[16/10] overflow-hidden rounded-2xl">
+                <div className="relative h-[100dvh] w-[100vw] sm:h-auto sm:aspect-[16/10] sm:w-full sm:overflow-hidden sm:rounded-2xl">
                   <Image
                     src={open.src}
                     alt={open.title}
@@ -266,28 +266,26 @@ export default function ChefPick() {
                   />
                 </div>
               ) : (
-                <div className="relative aspect-video overflow-hidden rounded-2xl">
+                <div className="mx-auto aspect-[9/16] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-black sm:aspect-video sm:max-h-none sm:w-full sm:max-w-4xl sm:rounded-2xl">
                   <iframe
                     src={toEmbedUrl(open.src)}
-                    className="absolute inset-0 h-full w-full"
+                    className="h-full w-full"
                     title={open.title}
-                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                     allowFullScreen
                   />
                 </div>
               )}
 
-              <div className="mt-4 flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="font-serif text-xl font-bold text-white sm:text-2xl">
-                    {open.title}
-                  </h4>
-                  {open.description && (
-                    <p className="mt-1 text-sm text-white/60">
-                      {open.description}
-                    </p>
-                  )}
-                </div>
+              <div className="absolute inset-x-0 bottom-4 px-4 text-left sm:static sm:mt-4">
+                <h4 className="font-serif text-xl font-bold text-white drop-shadow-lg sm:text-2xl">
+                  {open.title}
+                </h4>
+                {open.description && (
+                  <p className="mt-1 text-sm text-white/80 drop-shadow sm:text-white/60">
+                    {open.description}
+                  </p>
+                )}
               </div>
             </motion.div>
           </motion.div>

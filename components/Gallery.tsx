@@ -193,14 +193,14 @@ export default function Gallery() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActive(null)}
-            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black backdrop-blur-md sm:bg-black/95 sm:p-4"
           >
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 prev();
               }}
-              className="absolute left-3 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:left-6"
+              className="absolute left-3 z-10 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:left-6"
               aria-label="Anterior"
             >
               <ChevronLeft className="h-5 w-5" />
@@ -211,31 +211,31 @@ export default function Gallery() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative max-h-[85vh] w-full max-w-4xl"
+              className="relative flex h-full w-full items-center justify-center sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-4xl"
             >
               {IMAGES[active].type === "video" ? (
-                <div className="mx-auto aspect-[9/16] w-full max-w-[min(380px,85vh*9/16)] overflow-hidden rounded-2xl bg-black shadow-2xl shadow-black/60 ring-1 ring-white/10">
+                <div className="mx-auto aspect-[9/16] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-black sm:max-w-[min(380px,calc(85vh*9/16))] sm:rounded-2xl sm:shadow-2xl sm:shadow-black/60 sm:ring-1 sm:ring-white/10">
                   <iframe
                     src={toEmbedUrl(IMAGES[active].src)}
                     className="h-full w-full"
                     title={IMAGES[active].caption}
-                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                     allowFullScreen
                   />
                 </div>
               ) : (
-                <div className="relative aspect-[4/3]">
+                <div className="relative h-[100dvh] w-[100vw] sm:h-auto sm:aspect-[4/3] sm:w-full">
                   <Image
                     src={IMAGES[active].src}
                     alt={IMAGES[active].caption}
                     fill
-                    className="rounded-xl object-contain"
+                    className="object-contain sm:rounded-xl"
                     sizes="100vw"
                     priority
                   />
                 </div>
               )}
-              <p className="mt-3 text-center font-serif text-base text-white italic sm:text-lg">
+              <p className="absolute inset-x-0 bottom-4 px-4 text-center font-serif text-sm text-white italic drop-shadow-lg sm:static sm:mt-3 sm:px-0 sm:text-lg">
                 {IMAGES[active].caption}
               </p>
             </motion.div>
@@ -244,14 +244,14 @@ export default function Gallery() {
                 e.stopPropagation();
                 next();
               }}
-              className="absolute right-3 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:right-6"
+              className="absolute right-3 z-10 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 sm:right-6"
               aria-label="Siguiente"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
             <button
               onClick={() => setActive(null)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white"
+              className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white/90 backdrop-blur hover:bg-white/20 sm:bg-transparent"
               aria-label="Cerrar"
             >
               <X className="h-5 w-5" />
