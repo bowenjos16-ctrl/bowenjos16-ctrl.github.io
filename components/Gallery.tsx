@@ -214,10 +214,10 @@ export default function Gallery() {
               className="relative max-h-[85vh] w-full max-w-4xl"
             >
               {IMAGES[active].type === "video" ? (
-                <div className="relative aspect-video overflow-hidden rounded-xl">
+                <div className="mx-auto aspect-[9/16] w-full max-w-[min(380px,85vh*9/16)] overflow-hidden rounded-2xl bg-black shadow-2xl shadow-black/60 ring-1 ring-white/10">
                   <iframe
                     src={toEmbedUrl(IMAGES[active].src)}
-                    className="absolute inset-0 h-full w-full"
+                    className="h-full w-full"
                     title={IMAGES[active].caption}
                     allow="autoplay; encrypted-media; picture-in-picture"
                     allowFullScreen
