@@ -300,7 +300,7 @@ export default function LoyaltyModal() {
       const res = await apiRedeem(client.telefono, reward.id);
       if (res.ok && res.code) {
         if (res.client) setClient(res.client);
-        setRedeemedInfo({ code: res.code, rewardName: reward.nombre });
+        setRedeemedInfo({ code: res.code, rewardName: reward.descripcion });
         setConfirmRedeem(null);
         setView("redeemed");
       } else if (res.error === "insufficient_points") {
@@ -1077,12 +1077,9 @@ function RewardsView({
                           <Lock className="h-4 w-4 text-white/40" />
                         )}
                         <h4 className="font-serif text-base font-bold text-white">
-                          {r.nombre}
+                          {r.descripcion}
                         </h4>
                       </div>
-                      <p className="mt-1 text-xs text-white/60">
-                        {r.descripcion}
-                      </p>
                     </div>
                     <div className="text-right">
                       <p className="font-serif text-lg font-black text-white">
