@@ -5,8 +5,10 @@ import { Instagram, Sparkles, ArrowRight, Check, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { CONFIG } from "@/lib/config";
 import { loadSession, apiAwardInstagramBonus } from "@/lib/loyalty";
+import { useLoyalty } from "./LoyaltyProvider";
 
 export default function SocialIncentive() {
+  const { refreshClient } = useLoyalty();
   const [loading, setLoading] = useState(false);
   const [awarded, setAwarded] = useState(false);
 
@@ -20,7 +22,11 @@ export default function SocialIncentive() {
     setLoading(true);
     try {
       const res = await apiAwardInstagramBonus(session.client.telefono);
-      if (res.ok || res.alreadyClaimed) setAwarded(true);
+      if (res.ok || res.alreadyClaimed) {
+        setAwarded(true);
+        // Refresca puntos en el menú/UI
+        if (res.ok) await refreshClient();
+      }
     } catch (err) {
       console.error("Failed to award Instagram bonus:", err);
     } finally {

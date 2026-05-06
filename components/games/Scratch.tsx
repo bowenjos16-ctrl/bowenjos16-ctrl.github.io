@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift, Check, Loader2 } from "lucide-react";
 import { loadSession, apiAwardGamePoints } from "@/lib/loyalty";
+import { useLoyalty } from "../LoyaltyProvider";
 
 const PRIZES = [
   { label: "5% descuento", code: "SCRATCH5", weight: 3 },
@@ -33,6 +34,7 @@ function pickPrize() {
 type GameProps = { onPlayed?: () => void; locked?: boolean };
 
 export default function Scratch({ onPlayed, locked }: GameProps = {}) {
+  const { refreshClient } = useLoyalty();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [prize] = useState(pickPrize);
   const [revealed, setRevealed] = useState(false);
@@ -52,10 +54,17 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
     setAwardState("loading");
     apiAwardGamePoints(session.client.telefono, prize.code)
       .then((res) => {
-        setAwardState(res.ok || res.error === "cooldown" ? "ok" : "fail");
+        if (res.ok) {
+          setAwardState("ok");
+          void refreshClient();
+        } else if (res.error === "cooldown") {
+          setAwardState("ok");
+        } else {
+          setAwardState("fail");
+        }
       })
       .catch(() => setAwardState("fail"));
-  }, [revealed, prize.code]);
+  }, [revealed, prize.code, refreshClient]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

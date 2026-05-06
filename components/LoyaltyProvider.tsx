@@ -11,6 +11,7 @@ import {
 import {
   type LoyaltyClient,
   type LoyaltyConfig,
+  apiGetClient,
   apiGetConfig,
   clearSession,
   loadSession,
@@ -25,6 +26,7 @@ type Ctx = {
   openModal: () => void;
   closeModal: () => void;
   logout: () => void;
+  refreshClient: () => Promise<void>;
   isLoggedIn: boolean;
 };
 
@@ -36,6 +38,7 @@ const LoyaltyCtx = createContext<Ctx>({
   openModal: () => {},
   closeModal: () => {},
   logout: () => {},
+  refreshClient: async () => {},
   isLoggedIn: false,
 });
 
@@ -76,6 +79,18 @@ export default function LoyaltyProvider({
     setModalOpen(false);
   }, [setClient]);
 
+  // Re-fetch del cliente desde el backend para sincronizar puntos/nivel.
+  // Se llama tras acreditar puntos por bonus (IG, Google, juegos).
+  const refreshClient = useCallback(async () => {
+    if (!client) return;
+    try {
+      const res = await apiGetClient(client.telefono);
+      if (res.ok && res.client) setClient(res.client);
+    } catch (err) {
+      console.warn("[loyalty] refreshClient failed:", err);
+    }
+  }, [client, setClient]);
+
   const value = useMemo<Ctx>(
     () => ({
       client,
@@ -85,9 +100,10 @@ export default function LoyaltyProvider({
       openModal,
       closeModal,
       logout,
+      refreshClient,
       isLoggedIn: !!client,
     }),
-    [client, config, modalOpen, setClient, openModal, closeModal, logout],
+    [client, config, modalOpen, setClient, openModal, closeModal, logout, refreshClient],
   );
 
   return <LoyaltyCtx.Provider value={value}>{children}</LoyaltyCtx.Provider>;
