@@ -258,18 +258,20 @@ export default function LoyaltyModal() {
   const openRewards = async () => {
     setError(null);
     setView("rewards");
-    if (!rewards) {
-      setLoading(true);
-      try {
-        const res = await apiGetRewards();
-        if (res.ok && res.rewards) setRewards(res.rewards);
-        else setError("No se pudo cargar el catálogo de premios.");
-      } catch (err) {
+    // Siempre re-fetcheamos para que cualquier edición en la hoja
+    // Recompensas se refleje al instante (sin cache local).
+    setLoading(true);
+    try {
+      const res = await apiGetRewards();
+      if (res.ok && res.rewards) setRewards(res.rewards);
+      else if (!rewards) setError("No se pudo cargar el catálogo de premios.");
+    } catch (err) {
+      if (!rewards) {
         const msg = err instanceof Error ? err.message : "Error";
         setError(`No se pudo conectar: ${msg}`);
-      } finally {
-        setLoading(false);
       }
+    } finally {
+      setLoading(false);
     }
   };
 
