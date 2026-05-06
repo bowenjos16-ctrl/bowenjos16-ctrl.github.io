@@ -455,6 +455,17 @@ function handleRating_(data) {
   }
 }
 
+/**
+ * Normaliza cedula leida de Sheets: quita no-digitos y restaura el 0
+ * inicial si quedo con 9 digitos (Sheets convierte numero y elimina el 0).
+ */
+function normalizeCedula_(v) {
+  if (v === "" || v == null) return "";
+  var digits = String(v).replace(/\D/g, "");
+  if (digits.length === 9) digits = "0" + digits;
+  return digits;
+}
+
 function escapeHtml_(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;")
@@ -486,9 +497,39 @@ function register_(data) {
     id, String(data.nombre).trim(), phone, String(data.email).trim(), now,
     0, 0, "Bronce",
     true, now, "",
-    cedula
+    ""
   ]);
+  // Forzar formato texto en la celda de cedula para preservar ceros iniciales
+  // (Google Sheets convierte "0123456789" a numero y elimina el 0).
+  var lastRow = sh.getLastRow();
+  sh.getRange(lastRow, 12).setNumberFormat("@").setValue(cedula);
   return { ok: true, client: findClientByPhone_(phone) };
+}
+
+/**
+ * Aplica formato texto ("@") a toda la columna de cedulas (col L = 12) en
+ * la hoja Clientes. Ejecuta una vez para que cedulas existentes y futuras
+ * conserven sus ceros iniciales. Tambien repara filas donde el 0 ya se
+ * perdio (asume cedulas de 10 digitos).
+ */
+function fixCedulasLeadingZeros() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.CLI);
+  if (!sh) return;
+  var lastRow = sh.getLastRow();
+  if (lastRow < 2) return;
+  var range = sh.getRange(2, 12, lastRow - 1, 1);
+  range.setNumberFormat("@");
+  var values = range.getValues();
+  for (var i = 0; i < values.length; i++) {
+    var v = values[i][0];
+    if (v === "" || v == null) continue;
+    var digits = String(v).replace(/\D/g, "");
+    // Si quedo con 9 digitos, falta el 0 inicial.
+    if (digits.length === 9) digits = "0" + digits;
+    values[i][0] = digits;
+  }
+  range.setValues(values);
 }
 
 function login_(data) {
@@ -632,7 +673,7 @@ function clientRowToObj_(r) {
     acepto_terminos: !!r[8],
     fecha_aceptacion: r[9],
     ultima_acumulacion: r[10],
-    cedula: r[11] ? String(r[11]) : ""
+    cedula: normalizeCedula_(r[11])
   };
 }
 
