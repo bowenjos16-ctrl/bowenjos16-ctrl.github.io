@@ -12,22 +12,19 @@ export default function SocialIncentive() {
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
+    // Abrimos Instagram INMEDIATAMENTE durante el click (user gesture).
+    // Si lo hiciéramos después de un await, el navegador bloquea el popup.
+    window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
     const session = loadSession();
-    if (!session) {
-      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
+    if (!session) return;
     setLoading(true);
     try {
       const res = await apiAwardInstagramBonus(session.client.telefono);
-      if (res.ok || res.alreadyClaimed) {
-        setAwarded(true);
-      }
+      if (res.ok || res.alreadyClaimed) setAwarded(true);
     } catch (err) {
       console.error("Failed to award Instagram bonus:", err);
     } finally {
       setLoading(false);
-      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
     }
   };
 

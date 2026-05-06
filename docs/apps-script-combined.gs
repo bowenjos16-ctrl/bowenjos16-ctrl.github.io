@@ -1227,6 +1227,40 @@ function driveImageUrl_(url) {
   return u;
 }
 
+// Helper: convierte cualquier URL de video (YouTube, Drive, vimeo, etc.)
+// al formato embed listo para usar en un <iframe>.
+// Retorna la URL embed; si no se puede deducir, devuelve la entrada tal cual.
+function videoEmbedUrl_(src) {
+  if (!src) return "";
+  var u = String(src).trim();
+
+  // Drive: /file/d/{ID}/(view|preview)
+  var m = u.match(/drive\.google\.com\/file\/d\/([^\/?\s]+)/);
+  if (m) return "https://drive.google.com/file/d/" + m[1] + "/preview";
+  // Drive ?id=
+  m = u.match(/drive\.google\.com.*[?&]id=([^&\s]+)/);
+  if (m) return "https://drive.google.com/file/d/" + m[1] + "/preview";
+
+  // YouTube: full URL watch?v= / youtu.be/ / shorts/
+  m = u.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&\?\s\/]+)/);
+  if (m) return "https://www.youtube.com/embed/" + m[1] + "?autoplay=1";
+
+  // Si ya es una URL embed (YouTube /embed/ o Drive /preview), pasala tal cual
+  if (/youtube\.com\/embed\//.test(u) || /drive\.google\.com\/file\/d\/[^\/]+\/preview/.test(u)) {
+    return u;
+  }
+
+  // ID puro de Drive (25+ chars). Asumimos Drive antes que YouTube
+  // porque IDs de YouTube son cortos (11 chars).
+  if (/^[-\w]{25,}$/.test(u)) return "https://drive.google.com/file/d/" + u + "/preview";
+
+  // ID corto: asumimos YouTube
+  if (/^[-\w]{6,15}$/.test(u)) return "https://www.youtube.com/embed/" + u + "?autoplay=1";
+
+  // Fallback: devolvemos la cadena tal cual (puede ser un .mp4 directo, etc.)
+  return u;
+}
+
 // Arregla la columna de precios en Menu_Items: la formatea como texto y
 // reescribe los valores numéricos como "X.XX" (ej: 3 → "3.00", 3.5 → "3.50").
 // Útil si Sheets convirtió automáticamente "3.00" a 3 al hacer migrarMenuActual().
@@ -2183,7 +2217,7 @@ function getGallery_(opts) {
       var tipo = String(r.tipo || "image").toLowerCase().trim();
       var src = String(r.src || "").trim();
       // Si parece URL de Drive, convertir a thumbnail
-      var srcOut = (tipo === "video") ? src : driveImageUrl_(src);
+      var srcOut = (tipo === "video") ? videoEmbedUrl_(src) : driveImageUrl_(src);
       var item = {
         type: tipo === "video" ? "video" : "image",
         src: srcOut,

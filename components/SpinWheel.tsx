@@ -18,7 +18,16 @@ const SEG = 360 / PRIZES.length;
 const STORAGE_KEY = "corte-piedra-spin";
 const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 
-type SpinRecord = (typeof PRIZES)[number] & { timestamp?: number };
+type SpinRecord = (typeof PRIZES)[number] & {
+  timestamp?: number;
+  rotation?: number;
+};
+
+// Rotacion final que deja el segmento `idx` exactamente bajo el puntero (12 o'clock).
+// Se usa como fallback si el record guardado no tiene rotation.
+function rotationForIndex(idx: number) {
+  return 360 - (idx * SEG + SEG / 2);
+}
 
 export default function SpinWheel() {
   const [open, setOpen] = useState(false);
@@ -48,6 +57,15 @@ export default function SpinWheel() {
       setWon({ label: data.label, value: data.value, color: data.color });
       setAlready(true);
       setDaysLeft(Math.ceil((COOLDOWN_MS - age) / (24 * 60 * 60 * 1000)));
+      // Restaurar la rotacion para que el puntero coincida con el premio guardado.
+      // Si no hay rotacion guardada (records viejos), la calculamos a partir
+      // del indice del premio en PRIZES.
+      if (typeof data.rotation === "number") {
+        setRotation(data.rotation);
+      } else {
+        const idx = PRIZES.findIndex((p) => p.value === data.value);
+        if (idx >= 0) setRotation(rotationForIndex(idx));
+      }
     } catch {}
   }, []);
 
@@ -62,7 +80,11 @@ export default function SpinWheel() {
       const prize = PRIZES[idx];
       setWon(prize);
       setSpinning(false);
-      const record: SpinRecord = { ...prize, timestamp: Date.now() };
+      const record: SpinRecord = {
+        ...prize,
+        timestamp: Date.now(),
+        rotation: stopAt,
+      };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
       setAlready(true);
       setDaysLeft(30);

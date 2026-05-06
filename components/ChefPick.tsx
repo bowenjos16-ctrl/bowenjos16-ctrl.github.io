@@ -10,6 +10,31 @@ import type { GalleryItem } from "@/lib/gallery-api";
 
 type Media = GalleryItem;
 
+// Convierte cualquier URL/ID de video (YouTube o Drive) al embed listo para iframe.
+// El backend ya hace esto, pero lo dejamos aquí como fallback robusto en cliente.
+function toEmbedUrl(src: string): string {
+  if (!src) return "";
+  const u = src.trim();
+  // Drive /file/d/{ID}/...
+  let m = u.match(/drive\.google\.com\/file\/d\/([^/?\s]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  // Drive ?id=
+  m = u.match(/drive\.google\.com.*[?&]id=([^&\s]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  // YouTube full URL
+  m = u.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&?\s/]+)/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+  // Ya es embed
+  if (/youtube\.com\/embed\//.test(u) || /drive\.google\.com\/file\/d\/[^/]+\/preview/.test(u)) {
+    return u;
+  }
+  // ID puro de Drive (25+ chars)
+  if (/^[-\w]{25,}$/.test(u)) return `https://drive.google.com/file/d/${u}/preview`;
+  // ID corto: asumimos YouTube
+  if (/^[-\w]{6,15}$/.test(u)) return `https://www.youtube.com/embed/${u}?autoplay=1`;
+  return u;
+}
+
 // Fallback estático: se usa cuando el endpoint de Galería falla
 const MEDIA_FALLBACK: Media[] = [
   {
@@ -243,7 +268,7 @@ export default function ChefPick() {
               ) : (
                 <div className="relative aspect-video overflow-hidden rounded-2xl">
                   <iframe
-                    src={`https://www.youtube.com/embed/${open.src}?autoplay=1`}
+                    src={toEmbedUrl(open.src)}
                     className="absolute inset-0 h-full w-full"
                     title={open.title}
                     allow="autoplay; encrypted-media; picture-in-picture"

@@ -10,31 +10,54 @@ import {
   Heart,
   Instagram,
   Camera,
+  Play,
 } from "lucide-react";
 import { CONFIG } from "@/lib/config";
 import { useTheme } from "@/components/ThemeProvider";
 
-type GalleryImg = { src: string; caption: string };
+type GalleryItemView = {
+  type: "image" | "video";
+  src: string;
+  caption: string;
+  poster?: string;
+};
 
-const IMAGES_FALLBACK: GalleryImg[] = [
-  { src: "/customers/client-3.webp", caption: "Cenas con velas" },
-  { src: "/customers/client-2.webp", caption: "Entre amigos" },
-  { src: "/customers/client-4.webp", caption: "Celebrando momentos" },
-  { src: "/customers/client-1.webp", caption: "Ambiente Corte Piedra" },
-  { src: "/customers/client-5.webp", caption: "Sobremesa con copas" },
-  { src: "/customers/client-8.webp", caption: "Noches que quedan" },
-  { src: "/customers/client-6.webp", caption: "Reuniones especiales" },
-  { src: "/customers/client-9.webp", caption: "Buena mesa" },
+// Convierte cualquier URL/ID de video (YouTube o Drive) al embed listo para iframe.
+function toEmbedUrl(src: string): string {
+  if (!src) return "";
+  const u = src.trim();
+  let m = u.match(/drive\.google\.com\/file\/d\/([^/?\s]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  m = u.match(/drive\.google\.com.*[?&]id=([^&\s]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  m = u.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([^&?\s/]+)/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+  if (/youtube\.com\/embed\//.test(u) || /drive\.google\.com\/file\/d\/[^/]+\/preview/.test(u)) return u;
+  if (/^[-\w]{25,}$/.test(u)) return `https://drive.google.com/file/d/${u}/preview`;
+  if (/^[-\w]{6,15}$/.test(u)) return `https://www.youtube.com/embed/${u}?autoplay=1`;
+  return u;
+}
+
+const IMAGES_FALLBACK: GalleryItemView[] = [
+  { type: "image", src: "/customers/client-3.webp", caption: "Cenas con velas" },
+  { type: "image", src: "/customers/client-2.webp", caption: "Entre amigos" },
+  { type: "image", src: "/customers/client-4.webp", caption: "Celebrando momentos" },
+  { type: "image", src: "/customers/client-1.webp", caption: "Ambiente Corte Piedra" },
+  { type: "image", src: "/customers/client-5.webp", caption: "Sobremesa con copas" },
+  { type: "image", src: "/customers/client-8.webp", caption: "Noches que quedan" },
+  { type: "image", src: "/customers/client-6.webp", caption: "Reuniones especiales" },
+  { type: "image", src: "/customers/client-9.webp", caption: "Buena mesa" },
 ];
 
 export default function Gallery() {
   const [active, setActive] = useState<number | null>(null);
   const { liveGallery } = useTheme();
-  // Convertir items live al formato local (caption en lugar de title)
-  const IMAGES: GalleryImg[] = liveGallery?.galeria && liveGallery.galeria.length > 0
-    ? liveGallery.galeria
-        .filter((g) => g.type === "image")
-        .map((g) => ({ src: g.src, caption: g.title }))
+  const IMAGES: GalleryItemView[] = liveGallery?.galeria && liveGallery.galeria.length > 0
+    ? liveGallery.galeria.map((g) =>
+        g.type === "video"
+          ? { type: "video", src: g.src, caption: g.title, poster: g.poster }
+          : { type: "image", src: g.src, caption: g.title },
+      )
     : IMAGES_FALLBACK;
 
   const prev = () =>
@@ -106,13 +129,20 @@ export default function Gallery() {
               }`}
             >
               <Image
-                src={img.src}
+                src={img.type === "video" ? (img.poster || "/customers/client-1.webp") : img.src}
                 alt={img.caption}
                 fill
                 className="object-cover transition-transform duration-700 group-hover:scale-110"
                 sizes="(max-width: 768px) 50vw, 25vw"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-70 transition-opacity group-hover:opacity-90" />
+              {img.type === "video" && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-md transition-all group-hover:bg-[var(--red)]/80">
+                    <Play className="ml-0.5 h-5 w-5 fill-white text-white" />
+                  </div>
+                </div>
+              )}
               <div className="absolute inset-x-0 bottom-0 p-3 text-left">
                 <p className="font-serif text-sm font-medium text-white sm:text-base">
                   {img.caption}
@@ -183,16 +213,28 @@ export default function Gallery() {
               onClick={(e) => e.stopPropagation()}
               className="relative max-h-[85vh] w-full max-w-4xl"
             >
-              <div className="relative aspect-[4/3]">
-                <Image
-                  src={IMAGES[active].src}
-                  alt={IMAGES[active].caption}
-                  fill
-                  className="rounded-xl object-contain"
-                  sizes="100vw"
-                  priority
-                />
-              </div>
+              {IMAGES[active].type === "video" ? (
+                <div className="relative aspect-video overflow-hidden rounded-xl">
+                  <iframe
+                    src={toEmbedUrl(IMAGES[active].src)}
+                    className="absolute inset-0 h-full w-full"
+                    title={IMAGES[active].caption}
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <div className="relative aspect-[4/3]">
+                  <Image
+                    src={IMAGES[active].src}
+                    alt={IMAGES[active].caption}
+                    fill
+                    className="rounded-xl object-contain"
+                    sizes="100vw"
+                    priority
+                  />
+                </div>
+              )}
               <p className="mt-3 text-center font-serif text-base text-white italic sm:text-lg">
                 {IMAGES[active].caption}
               </p>

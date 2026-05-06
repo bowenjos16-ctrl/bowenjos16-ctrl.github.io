@@ -74,33 +74,16 @@ export default function RatingSystem() {
   };
 
   const handleInstagramClick = async () => {
-    if (!client) {
-      // No logged in, just open Instagram
-      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    // User is logged in, try to award bonus points
+    // Abrimos Instagram INMEDIATAMENTE durante el click (user gesture).
+    // Si lo hiciéramos después de await, el navegador bloquea el popup.
+    window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
+    if (!client) return;
     setInstagramAwardLoading(true);
     try {
       const res = await apiAwardInstagramBonus(client.telefono);
-      if (res.ok) {
-        setInstagramAwarded(true);
-        // Open Instagram
-        window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
-      } else if (res.alreadyClaimed) {
-        // Already used the bonus
-        setInstagramAwarded(true);
-        window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
-      } else {
-        // Error awarding points, but still open Instagram
-        console.error("Error awarding Instagram bonus:", res.error);
-        window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
-      }
+      if (res.ok || res.alreadyClaimed) setInstagramAwarded(true);
     } catch (err) {
       console.error("Failed to award Instagram bonus:", err);
-      // Still open Instagram even if award failed
-      window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
     } finally {
       setInstagramAwardLoading(false);
     }
