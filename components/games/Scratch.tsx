@@ -34,7 +34,7 @@ function pickPrize() {
 type GameProps = { onPlayed?: () => void; locked?: boolean };
 
 export default function Scratch({ onPlayed, locked }: GameProps = {}) {
-  const { refreshClient } = useLoyalty();
+  const { setClient, refreshClient } = useLoyalty();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [prize] = useState(pickPrize);
   const [revealed, setRevealed] = useState(false);
@@ -56,7 +56,8 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
       .then((res) => {
         if (res.ok) {
           setAwardState("ok");
-          void refreshClient();
+          if (res.client) setClient(res.client);
+          else void refreshClient();
         } else if (res.error === "cooldown") {
           setAwardState("ok");
         } else {
@@ -64,7 +65,7 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
         }
       })
       .catch(() => setAwardState("fail"));
-  }, [revealed, prize.code, refreshClient]);
+  }, [revealed, prize.code, refreshClient, setClient]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

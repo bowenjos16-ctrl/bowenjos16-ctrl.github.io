@@ -55,21 +55,32 @@ export default function LoyaltyProvider({
   const [config, setConfig] = useState<LoyaltyConfig | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Restaurar sesión + cargar config al iniciar
-  useEffect(() => {
-    const sess = loadSession(60);
-    if (sess) setClientState(sess.client);
-
-    apiGetConfig().then((res) => {
-      if (res.ok && res.config) setConfig(res.config);
-    }).catch(() => {});
-  }, []);
-
   const setClient = useCallback((c: LoyaltyClient | null) => {
     setClientState(c);
     if (c) saveSession(c);
     else clearSession();
   }, []);
+
+  // Restaurar sesión + cargar config al iniciar.
+  // Después del restore desde localStorage, re-fetchea el cliente del backend
+  // para sincronizar puntos/nivel (los puntos pueden haber cambiado por bonus
+  // de IG/Google/juegos en otra pestaña o dispositivo).
+  useEffect(() => {
+    const sess = loadSession(60);
+    if (sess) {
+      setClientState(sess.client);
+      // Sync en background con el spreadsheet
+      apiGetClient(sess.client.telefono)
+        .then((res) => {
+          if (res.ok && res.client) setClient(res.client);
+        })
+        .catch(() => {});
+    }
+
+    apiGetConfig().then((res) => {
+      if (res.ok && res.config) setConfig(res.config);
+    }).catch(() => {});
+  }, [setClient]);
 
   const openModal = useCallback(() => setModalOpen(true), []);
   const closeModal = useCallback(() => setModalOpen(false), []);

@@ -10,7 +10,7 @@ import { useLoyalty } from "./LoyaltyProvider";
 const STORAGE_KEY = "cp-rating";
 
 export default function RatingSystem() {
-  const { client, refreshClient } = useLoyalty();
+  const { client, setClient, refreshClient } = useLoyalty();
   const isLogged = !!client;
   const [stars, setStars] = useState(0);
   const [hover, setHover] = useState(0);
@@ -69,7 +69,10 @@ export default function RatingSystem() {
       const res = await apiAwardGoogleReviewBonus(client.telefono);
       if (res.ok || res.alreadyClaimed) {
         setGoogleAwarded(true);
-        if (res.ok) await refreshClient();
+        if (res.ok) {
+          if (res.client) setClient(res.client);
+          else await refreshClient();
+        }
       }
     } catch (err) {
       console.error("Failed to award Google review bonus:", err);
@@ -86,7 +89,10 @@ export default function RatingSystem() {
       const res = await apiAwardInstagramBonus(client.telefono);
       if (res.ok || res.alreadyClaimed) {
         setInstagramAwarded(true);
-        if (res.ok) await refreshClient();
+        if (res.ok) {
+          if (res.client) setClient(res.client);
+          else await refreshClient();
+        }
       }
     } catch (err) {
       console.error("Failed to award Instagram bonus:", err);

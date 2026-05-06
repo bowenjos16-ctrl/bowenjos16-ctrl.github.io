@@ -8,7 +8,7 @@ import { loadSession, apiAwardInstagramBonus } from "@/lib/loyalty";
 import { useLoyalty } from "./LoyaltyProvider";
 
 export default function SocialIncentive() {
-  const { refreshClient } = useLoyalty();
+  const { setClient, refreshClient } = useLoyalty();
   const [loading, setLoading] = useState(false);
   const [awarded, setAwarded] = useState(false);
 
@@ -24,8 +24,10 @@ export default function SocialIncentive() {
       const res = await apiAwardInstagramBonus(session.client.telefono);
       if (res.ok || res.alreadyClaimed) {
         setAwarded(true);
-        // Refresca puntos en el menú/UI
-        if (res.ok) await refreshClient();
+        if (res.ok) {
+          if (res.client) setClient(res.client);
+          else await refreshClient();
+        }
       }
     } catch (err) {
       console.error("Failed to award Instagram bonus:", err);
