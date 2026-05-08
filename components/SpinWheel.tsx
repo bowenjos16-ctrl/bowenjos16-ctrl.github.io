@@ -1,144 +1,172 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
-import { Sparkles, Gift, X, Copy, Check } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Sparkles, Gift, X, Copy, Check, Lock } from "lucide-react";
 import { useLoyalty } from "@/components/LoyaltyProvider";
+import { apiGetSpinStatus, apiSpin } from "@/lib/loyalty";
 
+// Solo se usa para renderizar la rueda. La selección del premio es autoritativa
+// en backend (Apps Script): el endpoint devuelve el idx y aquí animamos.
 const PRIZES = [
-  { label: "5% OFF", short: "5% OFF", value: "CORTE5", color: "#c8202e", weight: 1 },
-  { label: "Limonada de sandía personal", short: "Limonada", value: "LIMONADA", color: "#0a0a0a", weight: 1 },
-  { label: "10% OFF", short: "10% OFF", value: "CORTE10", color: "#c8202e", weight: 1 },
-  { label: "2x1 en Mojitos", short: "Mojitos 2x1", value: "MOJITO2X1", color: "#0a0a0a", weight: 3 },
-  { label: "Cóctel de autor", short: "Cóctel", value: "COCTEL", color: "#c8202e", weight: 1 },
-  { label: "Suerte para la próxima", short: "Suerte!", value: "NEXT_TIME", color: "#0a0a0a", weight: 3 },
-  { label: "10% desc. en Ribeye", short: "Ribeye -10%", value: "RIBEYE10", color: "#c8202e", weight: 3 },
-  { label: "Consumo valorado en $2.50", short: "$2.50", value: "VAL250", color: "#0a0a0a", weight: 1 },
+  { label: "5% OFF", short: "5% OFF", value: "CORTE5", color: "#c8202e" },
+  { label: "Limonada de sandía personal", short: "Limonada", value: "LIMONADA", color: "#0a0a0a" },
+  { label: "10% OFF", short: "10% OFF", value: "CORTE10", color: "#c8202e" },
+  { label: "2x1 en Mojitos", short: "Mojitos 2x1", value: "MOJITO2X1", color: "#0a0a0a" },
+  { label: "Cóctel de autor", short: "Cóctel", value: "COCTEL", color: "#c8202e" },
+  { label: "Suerte para la próxima", short: "Suerte!", value: "NEXT_TIME", color: "#0a0a0a" },
+  { label: "10% desc. en Ribeye", short: "Ribeye -10%", value: "RIBEYE10", color: "#c8202e" },
+  { label: "Consumo valorado en $2.50", short: "$2.50", value: "VAL250", color: "#0a0a0a" },
 ];
-const TOTAL_WEIGHT = PRIZES.reduce((s, p) => s + p.weight, 0);
 const SEG = 360 / PRIZES.length;
-const STORAGE_KEY_BASE = "corte-piedra-spin";
-const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias = 1 mes
-// Clave de localStorage por usuario (cooldown propio por teléfono).
-// Si no hay sesión, usa la global como fallback.
-function storageKeyFor(telefono: string | null | undefined) {
-  return telefono ? `${STORAGE_KEY_BASE}:${telefono}` : STORAGE_KEY_BASE;
-}
-// Sesión de auto-apertura al login: solo abrimos una vez por sesión de browser.
 const AUTO_OPEN_FLAG = "corte-piedra-spin-autoopen";
 
-type SpinRecord = (typeof PRIZES)[number] & {
-  timestamp?: number;
-  rotation?: number;
-};
+type WonState = (typeof PRIZES)[number] & { codigo: string };
 
-// Rotacion final que deja el segmento `idx` exactamente bajo el puntero (12 o'clock).
-// Se usa como fallback si el record guardado no tiene rotation.
+// Rotación final que deja el segmento `idx` exactamente bajo el puntero (12 o'clock).
 function rotationForIndex(idx: number) {
   return 360 - (idx * SEG + SEG / 2);
 }
 
 export default function SpinWheel() {
-  const { client, isLoggedIn } = useLoyalty();
+  const { client, isLoggedIn, openModal: openLoyaltyModal } = useLoyalty();
   const [open, setOpen] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const [won, setWon] = useState<(typeof PRIZES)[number] | null>(null);
+  const [won, setWon] = useState<WonState | null>(null);
   const [copied, setCopied] = useState(false);
   const [already, setAlready] = useState(false);
   const [daysLeft, setDaysLeft] = useState<number>(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [spinError, setSpinError] = useState<string | null>(null);
+  const fetchedForRef = useRef<string | null>(null);
 
-  // Carga el record de cooldown según el usuario (o el global si no hay sesión).
-  // Se re-ejecuta al hacer login/logout para que cada usuario tenga su mes propio.
+  // Reset al cambiar de usuario (logout o cambio de cuenta).
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const key = storageKeyFor(client?.telefono);
-    const saved = localStorage.getItem(key);
-
-    // Reset del estado al cambiar de usuario.
     setWon(null);
     setAlready(false);
     setDaysLeft(0);
     setRotation(0);
-
-    if (!saved) return;
-    try {
-      const data = JSON.parse(saved) as SpinRecord;
-      // Compatibilidad: registros viejos sin timestamp se asumen vencidos.
-      const ts = typeof data.timestamp === "number" ? data.timestamp : 0;
-      const age = Date.now() - ts;
-      if (age >= COOLDOWN_MS) {
-        // Cooldown vencido: limpiar para permitir nueva tirada.
-        localStorage.removeItem(key);
-        return;
-      }
-      // Buscar el premio por value para mantener todas las propiedades vigentes.
-      const current = PRIZES.find((p) => p.value === data.value);
-      setWon(current ?? { label: data.label, short: data.short ?? data.label, value: data.value, color: data.color, weight: 1 });
-      setAlready(true);
-      setDaysLeft(Math.ceil((COOLDOWN_MS - age) / (24 * 60 * 60 * 1000)));
-      // Restaurar la rotacion: SIEMPRE recalculamos desde el idx del premio
-      // ganado para evitar el bug histórico donde se guardaban rotaciones con
-      // turns fraccionarios que no coincidían con el segmento correcto.
-      const idx = PRIZES.findIndex((p) => p.value === data.value);
-      if (idx >= 0) setRotation(rotationForIndex(idx));
-    } catch {}
+    setSpinError(null);
+    fetchedForRef.current = null;
   }, [client?.telefono]);
 
-  // Auto-abrir la ruleta al hacer login si el usuario tiene giro disponible.
-  // Solo una vez por sesión de browser para no ser molesto en cada navegación.
+  // Carga estado de la ruleta desde el backend cuando el usuario está logueado
+  // y se abre el modal (lazy: solo cuando hace falta).
+  const fetchStatus = useCallback(
+    async (telefono: string) => {
+      if (fetchedForRef.current === telefono) return;
+      fetchedForRef.current = telefono;
+      setLoadingStatus(true);
+      try {
+        const res = await apiGetSpinStatus(telefono);
+        if (res.ok) {
+          if (res.lastPrize && res.lastPrize.idx >= 0) {
+            const idx = res.lastPrize.idx;
+            const base = PRIZES[idx];
+            if (base) {
+              setWon({ ...base, codigo: res.lastPrize.codigo || "" });
+              setRotation(rotationForIndex(idx));
+            }
+          }
+          if (!res.available) {
+            setAlready(true);
+            setDaysLeft(res.daysLeft || 0);
+          } else {
+            setAlready(false);
+            setDaysLeft(0);
+          }
+        }
+      } catch (err) {
+        console.warn("[spinwheel] status failed:", err);
+      } finally {
+        setLoadingStatus(false);
+      }
+    },
+    [],
+  );
+
+  // Auto-abrir la ruleta al hacer login si tiene giro disponible. Solo 1 vez
+  // por sesión de browser. Hace fetch del status para decidir.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isLoggedIn || !client?.telefono) return;
     const flagKey = `${AUTO_OPEN_FLAG}:${client.telefono}`;
     if (sessionStorage.getItem(flagKey)) return;
-    // Si NO ya tiró este mes, abrir invitando al giro.
-    if (!already) {
-      const t = setTimeout(() => {
-        setOpen(true);
-        sessionStorage.setItem(flagKey, "1");
-      }, 800);
-      return () => clearTimeout(t);
-    }
-  }, [isLoggedIn, client?.telefono, already]);
+    sessionStorage.setItem(flagKey, "1");
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiGetSpinStatus(client.telefono);
+        if (cancelled) return;
+        if (res.ok && res.available) {
+          setTimeout(() => setOpen(true), 800);
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, client?.telefono]);
 
-  const spin = () => {
+  // Cargar status al abrir el modal (si es usuario logueado).
+  useEffect(() => {
+    if (!open) return;
+    if (!isLoggedIn || !client?.telefono) return;
+    fetchStatus(client.telefono);
+  }, [open, isLoggedIn, client?.telefono, fetchStatus]);
+
+  const spin = async () => {
     if (spinning || already) return;
+    if (!isLoggedIn || !client?.telefono) return;
+    setSpinError(null);
     setSpinning(true);
-    // Selección ponderada: premios con weight mayor caen con mayor probabilidad.
-    let r = Math.random() * TOTAL_WEIGHT;
-    let idx = 0;
-    for (let i = 0; i < PRIZES.length; i++) {
-      r -= PRIZES[i].weight;
-      if (r <= 0) { idx = i; break; }
-    }
-    // IMPORTANTE: turns DEBE ser entero. Si fuera fraccionario el offset extra
-    // (turns*360 mod 360 ≠ 0) desplaza el wheel y queda en el segmento equivocado.
-    const turns = 6 + Math.floor(Math.random() * 3); // 6, 7 u 8 vueltas
-    const stopAt = turns * 360 + (360 - (idx * SEG + SEG / 2));
-    setRotation(stopAt);
-    setTimeout(() => {
-      const prize = PRIZES[idx];
-      setWon(prize);
+    try {
+      const res = await apiSpin(client.telefono);
+      if (!res.ok || !res.prize) {
+        if (res.error === "cooldown" && res.daysLeft) {
+          setAlready(true);
+          setDaysLeft(res.daysLeft);
+          // Hard-refresh status para mostrar el premio anterior si lo hay.
+          fetchedForRef.current = null;
+          fetchStatus(client.telefono);
+        } else {
+          setSpinError(res.error || "No se pudo girar");
+        }
+        setSpinning(false);
+        return;
+      }
+      const prize = res.prize;
+      const base = PRIZES[prize.idx];
+      // Animar a ese idx con vueltas enteras para que el puntero quede exacto.
+      const turns = 6 + Math.floor(Math.random() * 3); // 6, 7 u 8
+      const stopAt = turns * 360 + rotationForIndex(prize.idx);
+      setRotation(stopAt);
+      setTimeout(() => {
+        if (base) {
+          setWon({ ...base, codigo: prize.codigo || "" });
+        }
+        setSpinning(false);
+        setAlready(true);
+        setDaysLeft(30);
+      }, 5000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error de red";
+      setSpinError(msg);
       setSpinning(false);
-      const record: SpinRecord = {
-        ...prize,
-        timestamp: Date.now(),
-        rotation: stopAt,
-      };
-      localStorage.setItem(storageKeyFor(client?.telefono), JSON.stringify(record));
-      setAlready(true);
-      setDaysLeft(30);
-    }, 5000);
+    }
   };
 
   const copy = async () => {
-    if (!won) return;
-    await navigator.clipboard.writeText(won.value);
+    if (!won || !won.codigo) return;
+    await navigator.clipboard.writeText(won.codigo);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLoginClick = () => {
+    setOpen(false);
+    openLoyaltyModal();
   };
 
   return (
@@ -206,7 +234,6 @@ export default function SpinWheel() {
 
               {/* Wheel */}
               <div className="relative mx-auto my-8 h-72 w-72">
-                {/* Pointer */}
                 <div className="absolute top-0 left-1/2 z-20 -translate-x-1/2 -translate-y-1">
                   <div className="h-0 w-0 border-x-[10px] border-t-[20px] border-x-transparent border-t-[white] drop-shadow-lg" />
                 </div>
@@ -262,14 +289,37 @@ export default function SpinWheel() {
                 </motion.svg>
               </div>
 
-              {!already && (
+              {/* Botón girar / login según estado */}
+              {!already && !isLoggedIn && (
+                <div className="mt-2 flex flex-col items-center gap-3">
+                  <button
+                    disabled
+                    className="flex items-center gap-2 rounded-full bg-[var(--charcoal)] px-10 py-3 font-serif text-sm font-bold tracking-widest text-white/40 uppercase"
+                  >
+                    <Lock className="h-4 w-4" />
+                    Girar
+                  </button>
+                  <button
+                    onClick={handleLoginClick}
+                    className="text-xs tracking-widest text-[var(--red)] uppercase underline-offset-4 hover:underline"
+                  >
+                    Inicia sesión para girar
+                  </button>
+                </div>
+              )}
+
+              {!already && isLoggedIn && (
                 <button
                   onClick={spin}
-                  disabled={spinning}
+                  disabled={spinning || loadingStatus}
                   className="mt-2 rounded-full bg-gradient-to-br from-[white] to-[var(--red)] px-10 py-3 font-serif text-sm font-bold tracking-widest text-[var(--background)] uppercase shadow-lg shadow-[var(--red)]/30 transition-transform hover:scale-105 disabled:opacity-50"
                 >
-                  {spinning ? "Girando..." : "Girar"}
+                  {spinning ? "Girando..." : loadingStatus ? "Cargando..." : "Girar"}
                 </button>
+              )}
+
+              {spinError && (
+                <p className="mt-3 text-xs text-[var(--red)]">{spinError}</p>
               )}
 
               {won && !spinning && (
@@ -284,11 +334,11 @@ export default function SpinWheel() {
                   <p className="red-gradient font-serif text-2xl font-black">
                     {won.label}
                   </p>
-                  {won.value !== "NEXT_TIME" && (
+                  {won.value !== "NEXT_TIME" && won.codigo && (
                     <>
                       <div className="mt-3 flex items-center justify-center gap-2">
                         <code className="rounded-md bg-[var(--charcoal)] px-3 py-1.5 font-mono text-sm text-[white]">
-                          {won.value}
+                          {won.codigo}
                         </code>
                         <button
                           onClick={copy}

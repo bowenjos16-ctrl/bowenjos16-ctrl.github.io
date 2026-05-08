@@ -273,6 +273,43 @@ export async function apiAwardGamePoints(telefono: string, prizeCode: string) {
 }
 
 // ──────────────────────────────────────────────────────────
+// Ruleta (cooldown autoritativo en backend)
+// ──────────────────────────────────────────────────────────
+
+export type SpinPrize = {
+  idx: number;
+  value: string;
+  label: string;
+  codigo: string;
+};
+
+export async function apiGetSpinStatus(telefono: string) {
+  return apiPost<{
+    ok: boolean;
+    available?: boolean;
+    daysLeft?: number;
+    lastPrize?: (SpinPrize & { fecha?: string }) | null;
+    error?: string;
+  }>({
+    action: "spinStatus",
+    telefono: normalizePhone(telefono),
+  });
+}
+
+export async function apiSpin(telefono: string) {
+  return apiPost<{
+    ok: boolean;
+    prize?: SpinPrize;
+    duplicate?: boolean;
+    error?: string;
+    daysLeft?: number;
+  }>({
+    action: "spin",
+    telefono: normalizePhone(telefono),
+  });
+}
+
+// ──────────────────────────────────────────────────────────
 // Session (localStorage)
 // ──────────────────────────────────────────────────────────
 

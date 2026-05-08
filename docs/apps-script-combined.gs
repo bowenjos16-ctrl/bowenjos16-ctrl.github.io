@@ -43,8 +43,24 @@ var SHEETS = {
   MENU_ITM: "Menu_Items",
   EVENTOS: "Eventos",
   PROMOS: "Promos",
-  GALERIA: "Galeria"
+  GALERIA: "Galeria",
+  GIROS: "Giros"
 };
+
+// Premios de la ruleta (mirror del frontend). El backend es la fuente de verdad
+// para la selección ponderada y el cooldown — el frontend solo usa el idx
+// devuelto para animar la rueda.
+var SPIN_PRIZES = [
+  { idx: 0, value: "CORTE5",    label: "5% OFF",                       weight: 1 },
+  { idx: 1, value: "LIMONADA",  label: "Limonada de sandía personal",  weight: 1 },
+  { idx: 2, value: "CORTE10",   label: "10% OFF",                      weight: 1 },
+  { idx: 3, value: "MOJITO2X1", label: "2x1 en Mojitos",               weight: 3 },
+  { idx: 4, value: "COCTEL",    label: "Cóctel de autor",              weight: 1 },
+  { idx: 5, value: "NEXT_TIME", label: "Suerte para la próxima",       weight: 3 },
+  { idx: 6, value: "RIBEYE10",  label: "10% desc. en Ribeye",          weight: 3 },
+  { idx: 7, value: "VAL250",    label: "Consumo valorado en $2.50",    weight: 1 }
+];
+var SPIN_COOLDOWN_DAYS = 30;
 
 // Recompensas por defecto - se crean en setup() si la hoja esta vacia
 var DEFAULT_REWARDS = [
@@ -77,6 +93,10 @@ function setup() {
   ]);
   ensureSheet_(ss, SHEETS.PWD, ["fecha", "password_6_digitos", "fecha_envio_correo", "enviado_a"]);
   ensureSheet_(ss, SHEETS.FAIL, ["fecha_hora", "telefono", "password_intentada", "ip"]);
+  // Giros de ruleta: 1 fila por giro de cada cliente (cooldown 30 días)
+  ensureSheet_(ss, SHEETS.GIROS, [
+    "id", "cliente_id", "telefono", "fecha", "premio_value", "premio_label", "codigo"
+  ]);
 
   // Recompensas - hoja con catalogo de premios canjeables
   var rewSheet = ensureSheet_(ss, SHEETS.REW, ["id", "nombre", "descripcion", "costo_pts", "activo"]);
@@ -293,6 +313,8 @@ function doPost(e) {
       case "getMenu":    return json_(getMenu_(data.kind || "regular"));
       case "getEvents":  return json_(getEvents_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
       case "getGallery": return json_(getGallery_({ nocache: data.nocache === true || data.nocache === 1 || data.nocache === "1" }));
+      case "spinStatus": return json_(spinStatus_(data));
+      case "spin":       return json_(withLock_(function () { return spin_(data); }));
       default:           return json_({ ok: false, error: "unknown action" });
     }
   } catch (err) {
@@ -850,6 +872,144 @@ function generateRedeemCode_() {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
+}
+
+// =============================================================
+//  RULETA - cooldown 30 dias por usuario, autoritativo en backend
+// =============================================================
+
+/** Lee el ultimo giro del cliente desde la hoja Giros. */
+function lastSpinForPhone_(phone) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.GIROS);
+  if (!sh) return null;
+  var rows = sh.getDataRange().getValues();
+  var latest = null;
+  // cols: 0:id, 1:cliente_id, 2:telefono, 3:fecha, 4:premio_value, 5:premio_label, 6:codigo
+  for (var i = 1; i < rows.length; i++) {
+    if (normalizePhone_(rows[i][2]) === phone) {
+      var ts = new Date(rows[i][3]).getTime();
+      if (!latest || ts > latest.ts) {
+        latest = {
+          ts: ts,
+          fecha: rows[i][3],
+          value: String(rows[i][4] || ""),
+          label: String(rows[i][5] || ""),
+          codigo: String(rows[i][6] || "")
+        };
+      }
+    }
+  }
+  return latest;
+}
+
+/** Estado de la ruleta para un usuario logueado. */
+function spinStatus_(data) {
+  var phone = normalizePhone_(data.telefono);
+  if (!phone) return { ok: false, error: "missing_phone" };
+
+  var c = findClientByPhone_(phone);
+  if (!c) return { ok: false, error: "not_found" };
+
+  var last = lastSpinForPhone_(phone);
+  if (!last) {
+    return { ok: true, available: true, daysLeft: 0, lastPrize: null };
+  }
+  var ageDays = (Date.now() - last.ts) / (24 * 60 * 60 * 1000);
+  var daysLeft = Math.max(0, Math.ceil(SPIN_COOLDOWN_DAYS - ageDays));
+  // Buscar idx del premio para que el frontend pueda animar la rueda al segmento.
+  var idx = -1;
+  for (var i = 0; i < SPIN_PRIZES.length; i++) {
+    if (SPIN_PRIZES[i].value === last.value) { idx = i; break; }
+  }
+  return {
+    ok: true,
+    available: ageDays >= SPIN_COOLDOWN_DAYS,
+    daysLeft: daysLeft,
+    lastPrize: {
+      idx: idx,
+      value: last.value,
+      label: last.label,
+      codigo: last.codigo,
+      fecha: last.fecha
+    }
+  };
+}
+
+/**
+ * Ejecuta un giro: requiere usuario logueado, valida cooldown 30 dias,
+ * elige premio ponderado en backend, registra en Giros y devuelve el premio.
+ */
+function spin_(data) {
+  var phone = normalizePhone_(data.telefono);
+  if (!phone) return { ok: false, error: "missing_phone" };
+
+  // Idempotency: si el cliente reintenta, no doble-girar
+  if (isDuplicateRequest_(data.idempotencyKey)) {
+    var existing = lastSpinForPhone_(phone);
+    if (existing) {
+      var idxE = -1;
+      for (var k = 0; k < SPIN_PRIZES.length; k++) {
+        if (SPIN_PRIZES[k].value === existing.value) { idxE = k; break; }
+      }
+      return {
+        ok: true, duplicate: true,
+        prize: { idx: idxE, value: existing.value, label: existing.label, codigo: existing.codigo }
+      };
+    }
+  }
+
+  var c = findClientByPhone_(phone);
+  if (!c) return { ok: false, error: "not_found" };
+
+  // Validar cooldown
+  var last = lastSpinForPhone_(phone);
+  if (last) {
+    var ageDays = (Date.now() - last.ts) / (24 * 60 * 60 * 1000);
+    if (ageDays < SPIN_COOLDOWN_DAYS) {
+      return {
+        ok: false,
+        error: "cooldown",
+        daysLeft: Math.ceil(SPIN_COOLDOWN_DAYS - ageDays)
+      };
+    }
+  }
+
+  // Selección ponderada
+  var totalWeight = 0;
+  for (var t = 0; t < SPIN_PRIZES.length; t++) totalWeight += SPIN_PRIZES[t].weight;
+  var r = Math.random() * totalWeight;
+  var picked = SPIN_PRIZES[0];
+  for (var p = 0; p < SPIN_PRIZES.length; p++) {
+    r -= SPIN_PRIZES[p].weight;
+    if (r <= 0) { picked = SPIN_PRIZES[p]; break; }
+  }
+
+  // Codigo solo para premios canjeables (no para "Suerte para la próxima")
+  var codigo = picked.value === "NEXT_TIME" ? "" : picked.value;
+
+  // Registrar en hoja Giros
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.GIROS);
+  sh.appendRow([
+    Utilities.getUuid(),
+    c.id,
+    phone,
+    new Date(),
+    picked.value,
+    picked.label,
+    codigo
+  ]);
+
+  return {
+    ok: true,
+    prize: {
+      idx: picked.idx,
+      value: picked.value,
+      label: picked.label,
+      codigo: codigo
+    }
+  };
 }
 
 /**
