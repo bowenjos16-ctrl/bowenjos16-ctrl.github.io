@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift, Check, Loader2 } from "lucide-react";
-import { loadSession, apiAwardGamePoints } from "@/lib/loyalty";
+import { apiAwardGamePoints } from "@/lib/loyalty";
 import { useLoyalty } from "../LoyaltyProvider";
 
 const PRIZES = [
@@ -34,7 +34,7 @@ function pickPrize() {
 type GameProps = { onPlayed?: () => void; locked?: boolean };
 
 export default function Scratch({ onPlayed, locked }: GameProps = {}) {
-  const { setClient, refreshClient } = useLoyalty();
+  const { client, isLoggedIn, setClient, refreshClient } = useLoyalty();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [prize] = useState(pickPrize);
   const [revealed, setRevealed] = useState(false);
@@ -48,11 +48,10 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
     const isPointsPrize = prize.code in POINTS_PRIZES;
     if (!isPointsPrize) return;
     if (claimedRef.current) return;
-    const session = loadSession();
-    if (!session) return;
+    if (!isLoggedIn || !client?.telefono) return;
     claimedRef.current = true;
     setAwardState("loading");
-    apiAwardGamePoints(session.client.telefono, prize.code)
+    apiAwardGamePoints(client.telefono, prize.code)
       .then((res) => {
         if (res.ok) {
           setAwardState("ok");
@@ -65,7 +64,7 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
         }
       })
       .catch(() => setAwardState("fail"));
-  }, [revealed, prize.code, refreshClient, setClient]);
+  }, [revealed, prize.code, isLoggedIn, client?.telefono, refreshClient, setClient]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -131,7 +130,11 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
       </div>
 
       <div className="relative mx-auto aspect-[16/10] max-w-sm overflow-hidden rounded-2xl bg-gradient-to-br from-[white] to-[var(--red)]">
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <motion.div
+          animate={revealed ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="absolute inset-0 flex flex-col items-center justify-center text-center"
+        >
           <Sparkles className="mb-2 h-8 w-8 text-[var(--background)]" />
           <p className="font-serif text-xs tracking-widest text-[var(--background)] uppercase">
             Ganaste
@@ -142,13 +145,13 @@ export default function Scratch({ onPlayed, locked }: GameProps = {}) {
           <code className="mt-2 rounded-md bg-[var(--background)] px-2 py-0.5 font-mono text-xs text-[white]">
             {prize.code}
           </code>
-        </div>
+        </motion.div>
         <canvas
           ref={canvasRef}
           width={400}
           height={250}
-          className={`absolute inset-0 h-full w-full cursor-grab touch-none select-none ${
-            revealed ? "pointer-events-none" : ""
+          className={`absolute inset-0 h-full w-full cursor-grab touch-none select-none transition-opacity duration-700 ${
+            revealed ? "pointer-events-none opacity-0" : "opacity-100"
           }`}
           onMouseDown={() => (scratching.current = true)}
           onMouseUp={() => (scratching.current = false)}

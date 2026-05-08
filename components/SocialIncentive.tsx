@@ -4,37 +4,52 @@ import { motion } from "framer-motion";
 import { Instagram, Sparkles, ArrowRight, Check, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { CONFIG } from "@/lib/config";
-import { loadSession, apiAwardInstagramBonus } from "@/lib/loyalty";
+import { apiAwardInstagramBonus } from "@/lib/loyalty";
 import { useLoyalty } from "./LoyaltyProvider";
 
 export default function SocialIncentive() {
-  const { setClient, refreshClient } = useLoyalty();
+  // Usamos client del contexto (siempre fresco) en vez de loadSession() que
+  // expira a los 60 min y silenciosamente no acreditaba el bonus.
+  const { client, isLoggedIn, setClient, refreshClient, openModal } = useLoyalty();
   const [loading, setLoading] = useState(false);
-  const [awarded, setAwarded] = useState(false);
+  const [status, setStatus] = useState<"idle" | "awarded" | "claimed" | "error">("idle");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     // Abrimos Instagram INMEDIATAMENTE durante el click (user gesture).
     // Si lo hiciéramos después de un await, el navegador bloquea el popup.
     window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
-    const session = loadSession();
-    if (!session) return;
+    if (!isLoggedIn || !client?.telefono) {
+      setStatus("error");
+      setErrMsg("Inicia sesión para ganar los 100 puntos.");
+      // Abrir modal de loyalty para que el usuario inicie sesión.
+      setTimeout(() => openModal(), 600);
+      return;
+    }
     setLoading(true);
+    setErrMsg(null);
     try {
-      const res = await apiAwardInstagramBonus(session.client.telefono);
-      if (res.ok || res.alreadyClaimed) {
-        setAwarded(true);
-        if (res.ok) {
-          if (res.client) setClient(res.client);
-          else await refreshClient();
-        }
+      const res = await apiAwardInstagramBonus(client.telefono);
+      if (res.ok && res.pointsAwarded) {
+        if (res.client) setClient(res.client);
+        else await refreshClient();
+        setStatus("awarded");
+      } else if (res.alreadyClaimed || res.error === "already_claimed") {
+        setStatus("claimed");
+      } else {
+        setStatus("error");
+        setErrMsg(res.error || "No se pudieron acreditar los puntos.");
       }
     } catch (err) {
-      console.error("Failed to award Instagram bonus:", err);
+      const msg = err instanceof Error ? err.message : "Error de red";
+      setStatus("error");
+      setErrMsg(msg);
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <section className="relative py-16">
@@ -86,10 +101,15 @@ export default function SocialIncentive() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Acreditando...
                 </>
-              ) : awarded ? (
+              ) : status === "awarded" ? (
                 <>
                   <Check className="h-4 w-4" />
-                  ¡Bonus agregado!
+                  ¡+100 puntos!
+                </>
+              ) : status === "claimed" ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Ya reclamado
                 </>
               ) : (
                 <>
@@ -98,6 +118,9 @@ export default function SocialIncentive() {
                 </>
               )}
             </div>
+            {status === "error" && errMsg && (
+              <p className="mt-3 text-xs font-bold text-white/90">{errMsg}</p>
+            )}
           </div>
         </motion.a>
       </div>

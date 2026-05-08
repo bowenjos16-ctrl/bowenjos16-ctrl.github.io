@@ -21,8 +21,10 @@ export default function RatingSystem() {
   const [error, setError] = useState<string | null>(null);
   const [redirectGoogle, setRedirectGoogle] = useState(false);
   const [instagramAwardLoading, setInstagramAwardLoading] = useState(false);
-  const [instagramAwarded, setInstagramAwarded] = useState(false);
-  const [googleAwarded, setGoogleAwarded] = useState(false);
+  const [instagramStatus, setInstagramStatus] = useState<"idle" | "awarded" | "claimed" | "error">("idle");
+  const [googleAwardLoading, setGoogleAwardLoading] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<"idle" | "awarded" | "claimed" | "error">("idle");
+  const [bonusError, setBonusError] = useState<string | null>(null);
 
   const submit = async () => {
     if (stars === 0) return;
@@ -64,18 +66,27 @@ export default function RatingSystem() {
   const handleGoogleReviewClick = async () => {
     // Open Google review page regardless of login state
     window.open(CONFIG.googleReviewUrl, "_blank", "noopener,noreferrer");
-    if (!client || googleAwarded) return;
+    if (!client || googleStatus === "awarded" || googleStatus === "claimed") return;
+    setBonusError(null);
+    setGoogleAwardLoading(true);
     try {
       const res = await apiAwardGoogleReviewBonus(client.telefono);
-      if (res.ok || res.alreadyClaimed) {
-        setGoogleAwarded(true);
-        if (res.ok) {
-          if (res.client) setClient(res.client);
-          else await refreshClient();
-        }
+      if (res.ok && res.pointsAwarded) {
+        if (res.client) setClient(res.client);
+        else await refreshClient();
+        setGoogleStatus("awarded");
+      } else if (res.alreadyClaimed || res.error === "already_claimed") {
+        setGoogleStatus("claimed");
+      } else {
+        setGoogleStatus("error");
+        setBonusError(res.error || "No se pudieron acreditar los puntos.");
       }
     } catch (err) {
-      console.error("Failed to award Google review bonus:", err);
+      const msg = err instanceof Error ? err.message : "Error de red";
+      setGoogleStatus("error");
+      setBonusError(msg);
+    } finally {
+      setGoogleAwardLoading(false);
     }
   };
 
@@ -84,18 +95,24 @@ export default function RatingSystem() {
     // Si lo hiciéramos después de await, el navegador bloquea el popup.
     window.open(CONFIG.instagramUrl, "_blank", "noopener,noreferrer");
     if (!client) return;
+    setBonusError(null);
     setInstagramAwardLoading(true);
     try {
       const res = await apiAwardInstagramBonus(client.telefono);
-      if (res.ok || res.alreadyClaimed) {
-        setInstagramAwarded(true);
-        if (res.ok) {
-          if (res.client) setClient(res.client);
-          else await refreshClient();
-        }
+      if (res.ok && res.pointsAwarded) {
+        if (res.client) setClient(res.client);
+        else await refreshClient();
+        setInstagramStatus("awarded");
+      } else if (res.alreadyClaimed || res.error === "already_claimed") {
+        setInstagramStatus("claimed");
+      } else {
+        setInstagramStatus("error");
+        setBonusError(res.error || "No se pudieron acreditar los puntos.");
       }
     } catch (err) {
-      console.error("Failed to award Instagram bonus:", err);
+      const msg = err instanceof Error ? err.message : "Error de red";
+      setInstagramStatus("error");
+      setBonusError(msg);
     } finally {
       setInstagramAwardLoading(false);
     }
@@ -242,13 +259,23 @@ export default function RatingSystem() {
                       )}
                       <button
                         onClick={handleGoogleReviewClick}
-                        disabled={googleAwarded}
+                        disabled={googleAwardLoading || googleStatus === "awarded" || googleStatus === "claimed"}
                         className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#4285F4] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105 disabled:opacity-60"
                       >
-                        {googleAwarded ? (
+                        {googleAwardLoading ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Acreditando...
+                          </>
+                        ) : googleStatus === "awarded" ? (
                           <>
                             <Check className="h-3.5 w-3.5" />
-                            Bonus agregado
+                            +100 puntos
+                          </>
+                        ) : googleStatus === "claimed" ? (
+                          <>
+                            <Check className="h-3.5 w-3.5" />
+                            Ya reclamado
                           </>
                         ) : (
                           <>
@@ -266,18 +293,23 @@ export default function RatingSystem() {
                         </p>
                         <button
                           onClick={handleInstagramClick}
-                          disabled={instagramAwardLoading || instagramAwarded}
+                          disabled={instagramAwardLoading || instagramStatus === "awarded" || instagramStatus === "claimed"}
                           className="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#dc2743] px-6 py-3 text-sm font-bold tracking-wider text-white uppercase transition-transform hover:scale-105 disabled:opacity-60"
                         >
                           {instagramAwardLoading ? (
                             <>
                               <Loader2 className="h-4 w-4 animate-spin" />
-                              Abriendo...
+                              Acreditando...
                             </>
-                          ) : instagramAwarded ? (
+                          ) : instagramStatus === "awarded" ? (
                             <>
                               <Check className="h-4 w-4" />
-                              Bonus agregado
+                              +100 puntos
+                            </>
+                          ) : instagramStatus === "claimed" ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Ya reclamado
                             </>
                           ) : (
                             <>
@@ -287,6 +319,9 @@ export default function RatingSystem() {
                           )}
                         </button>
                       </div>
+                    )}
+                    {bonusError && (
+                      <p className="text-center text-xs text-[var(--ember)]">{bonusError}</p>
                     )}
                   </motion.div>
                 )}
