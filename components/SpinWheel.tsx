@@ -79,13 +79,11 @@ export default function SpinWheel() {
       setWon(current ?? { label: data.label, short: data.short ?? data.label, value: data.value, color: data.color, weight: 1 });
       setAlready(true);
       setDaysLeft(Math.ceil((COOLDOWN_MS - age) / (24 * 60 * 60 * 1000)));
-      // Restaurar la rotacion para que el puntero coincida con el premio guardado.
-      if (typeof data.rotation === "number") {
-        setRotation(data.rotation);
-      } else {
-        const idx = PRIZES.findIndex((p) => p.value === data.value);
-        if (idx >= 0) setRotation(rotationForIndex(idx));
-      }
+      // Restaurar la rotacion: SIEMPRE recalculamos desde el idx del premio
+      // ganado para evitar el bug histórico donde se guardaban rotaciones con
+      // turns fraccionarios que no coincidían con el segmento correcto.
+      const idx = PRIZES.findIndex((p) => p.value === data.value);
+      if (idx >= 0) setRotation(rotationForIndex(idx));
     } catch {}
   }, [client?.telefono]);
 
@@ -116,7 +114,9 @@ export default function SpinWheel() {
       r -= PRIZES[i].weight;
       if (r <= 0) { idx = i; break; }
     }
-    const turns = 6 + Math.random() * 2;
+    // IMPORTANTE: turns DEBE ser entero. Si fuera fraccionario el offset extra
+    // (turns*360 mod 360 ≠ 0) desplaza el wheel y queda en el segmento equivocado.
+    const turns = 6 + Math.floor(Math.random() * 3); // 6, 7 u 8 vueltas
     const stopAt = turns * 360 + (360 - (idx * SEG + SEG / 2));
     setRotation(stopAt);
     setTimeout(() => {
