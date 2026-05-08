@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift, X, Copy, Check } from "lucide-react";
+import { useLoyalty } from "@/components/LoyaltyProvider";
 
 const PRIZES = [
   { label: "5% OFF", short: "5% OFF", value: "CORTE5", color: "#c8202e", weight: 1 },
@@ -16,8 +17,15 @@ const PRIZES = [
 ];
 const TOTAL_WEIGHT = PRIZES.reduce((s, p) => s + p.weight, 0);
 const SEG = 360 / PRIZES.length;
-const STORAGE_KEY = "corte-piedra-spin";
-const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const STORAGE_KEY_BASE = "corte-piedra-spin";
+const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias = 1 mes
+// Clave de localStorage por usuario (cooldown propio por teléfono).
+// Si no hay sesión, usa la global como fallback.
+function storageKeyFor(telefono: string | null | undefined) {
+  return telefono ? `${STORAGE_KEY_BASE}:${telefono}` : STORAGE_KEY_BASE;
+}
+// Sesión de auto-apertura al login: solo abrimos una vez por sesión de browser.
+const AUTO_OPEN_FLAG = "corte-piedra-spin-autoopen";
 
 type SpinRecord = (typeof PRIZES)[number] & {
   timestamp?: number;
@@ -31,6 +39,7 @@ function rotationForIndex(idx: number) {
 }
 
 export default function SpinWheel() {
+  const { client, isLoggedIn } = useLoyalty();
   const [open, setOpen] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
@@ -40,10 +49,20 @@ export default function SpinWheel() {
   const [daysLeft, setDaysLeft] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Carga el record de cooldown según el usuario (o el global si no hay sesión).
+  // Se re-ejecuta al hacer login/logout para que cada usuario tenga su mes propio.
   useEffect(() => {
-    const saved = typeof window !== "undefined"
-      ? localStorage.getItem(STORAGE_KEY)
-      : null;
+    if (typeof window === "undefined") return;
+
+    const key = storageKeyFor(client?.telefono);
+    const saved = localStorage.getItem(key);
+
+    // Reset del estado al cambiar de usuario.
+    setWon(null);
+    setAlready(false);
+    setDaysLeft(0);
+    setRotation(0);
+
     if (!saved) return;
     try {
       const data = JSON.parse(saved) as SpinRecord;
@@ -52,7 +71,7 @@ export default function SpinWheel() {
       const age = Date.now() - ts;
       if (age >= COOLDOWN_MS) {
         // Cooldown vencido: limpiar para permitir nueva tirada.
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(key);
         return;
       }
       // Buscar el premio por value para mantener todas las propiedades vigentes.
@@ -61,8 +80,6 @@ export default function SpinWheel() {
       setAlready(true);
       setDaysLeft(Math.ceil((COOLDOWN_MS - age) / (24 * 60 * 60 * 1000)));
       // Restaurar la rotacion para que el puntero coincida con el premio guardado.
-      // Si no hay rotacion guardada (records viejos), la calculamos a partir
-      // del indice del premio en PRIZES.
       if (typeof data.rotation === "number") {
         setRotation(data.rotation);
       } else {
@@ -70,7 +87,24 @@ export default function SpinWheel() {
         if (idx >= 0) setRotation(rotationForIndex(idx));
       }
     } catch {}
-  }, []);
+  }, [client?.telefono]);
+
+  // Auto-abrir la ruleta al hacer login si el usuario tiene giro disponible.
+  // Solo una vez por sesión de browser para no ser molesto en cada navegación.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isLoggedIn || !client?.telefono) return;
+    const flagKey = `${AUTO_OPEN_FLAG}:${client.telefono}`;
+    if (sessionStorage.getItem(flagKey)) return;
+    // Si NO ya tiró este mes, abrir invitando al giro.
+    if (!already) {
+      const t = setTimeout(() => {
+        setOpen(true);
+        sessionStorage.setItem(flagKey, "1");
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [isLoggedIn, client?.telefono, already]);
 
   const spin = () => {
     if (spinning || already) return;
@@ -94,7 +128,7 @@ export default function SpinWheel() {
         timestamp: Date.now(),
         rotation: stopAt,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+      localStorage.setItem(storageKeyFor(client?.telefono), JSON.stringify(record));
       setAlready(true);
       setDaysLeft(30);
     }, 5000);
@@ -167,7 +201,7 @@ export default function SpinWheel() {
               <p className="mt-1 text-sm text-[var(--foreground)]/60">
                 {already
                   ? `Usa tu cupón al pagar · Próximo giro en ${daysLeft} día${daysLeft === 1 ? "" : "s"}`
-                  : "Una tirada gratis cada 30 días"}
+                  : "Solo 1 giro gratis al mes por usuario"}
               </p>
 
               {/* Wheel */}
