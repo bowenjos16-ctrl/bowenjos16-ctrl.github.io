@@ -5,15 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Gift, X, Copy, Check } from "lucide-react";
 
 const PRIZES = [
-  { label: "5% OFF", value: "CORTE5", color: "#c8202e" },
-  { label: "Bebida gratis", value: "DRINK_FREE", color: "#0a0a0a" },
-  { label: "10% OFF", value: "CORTE10", color: "#c8202e" },
-  { label: "Postre x $1", value: "DESSERT1", color: "#0a0a0a" },
-  { label: "15% OFF", value: "CORTE15", color: "#c8202e" },
-  { label: "2x1 mojitos", value: "MOJITO2X1", color: "#0a0a0a" },
-  { label: "Entrada gratis", value: "ENTRADA0", color: "#c8202e" },
-  { label: "20% OFF", value: "CORTE20", color: "#0a0a0a" },
+  { label: "5% OFF", short: "5% OFF", value: "CORTE5", color: "#c8202e", weight: 1 },
+  { label: "Limonada de sandía personal", short: "Limonada", value: "LIMONADA", color: "#0a0a0a", weight: 1 },
+  { label: "10% OFF", short: "10% OFF", value: "CORTE10", color: "#c8202e", weight: 1 },
+  { label: "2x1 en Mojitos", short: "Mojitos 2x1", value: "MOJITO2X1", color: "#0a0a0a", weight: 3 },
+  { label: "Cóctel de autor", short: "Cóctel", value: "COCTEL", color: "#c8202e", weight: 1 },
+  { label: "Suerte para la próxima", short: "Suerte!", value: "NEXT_TIME", color: "#0a0a0a", weight: 3 },
+  { label: "10% desc. en Ribeye", short: "Ribeye -10%", value: "RIBEYE10", color: "#c8202e", weight: 3 },
+  { label: "Consumo valorado en $2.50", short: "$2.50", value: "VAL250", color: "#0a0a0a", weight: 1 },
 ];
+const TOTAL_WEIGHT = PRIZES.reduce((s, p) => s + p.weight, 0);
 const SEG = 360 / PRIZES.length;
 const STORAGE_KEY = "corte-piedra-spin";
 const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
@@ -54,7 +55,9 @@ export default function SpinWheel() {
         localStorage.removeItem(STORAGE_KEY);
         return;
       }
-      setWon({ label: data.label, value: data.value, color: data.color });
+      // Buscar el premio por value para mantener todas las propiedades vigentes.
+      const current = PRIZES.find((p) => p.value === data.value);
+      setWon(current ?? { label: data.label, short: data.short ?? data.label, value: data.value, color: data.color, weight: 1 });
       setAlready(true);
       setDaysLeft(Math.ceil((COOLDOWN_MS - age) / (24 * 60 * 60 * 1000)));
       // Restaurar la rotacion para que el puntero coincida con el premio guardado.
@@ -72,7 +75,13 @@ export default function SpinWheel() {
   const spin = () => {
     if (spinning || already) return;
     setSpinning(true);
-    const idx = Math.floor(Math.random() * PRIZES.length);
+    // Selección ponderada: premios con weight mayor caen con mayor probabilidad.
+    let r = Math.random() * TOTAL_WEIGHT;
+    let idx = 0;
+    for (let i = 0; i < PRIZES.length; i++) {
+      r -= PRIZES[i].weight;
+      if (r <= 0) { idx = i; break; }
+    }
     const turns = 6 + Math.random() * 2;
     const stopAt = turns * 360 + (360 - (idx * SEG + SEG / 2));
     setRotation(stopAt);
@@ -196,14 +205,14 @@ export default function SpinWheel() {
                           x={tx}
                           y={ty}
                           fill="#f5ead3"
-                          fontSize="8"
+                          fontSize="7"
                           fontWeight="700"
                           textAnchor="middle"
                           dominantBaseline="middle"
                           transform={`rotate(${rot} ${tx} ${ty})`}
-                          style={{ letterSpacing: "0.5px" }}
+                          style={{ letterSpacing: "0.3px" }}
                         >
-                          {p.label}
+                          {p.short}
                         </text>
                       </g>
                     );
@@ -236,30 +245,39 @@ export default function SpinWheel() {
                   className="mt-2 rounded-2xl border border-[var(--red)]/40 bg-[var(--red)]/5 p-4"
                 >
                   <p className="text-xs tracking-widest text-[var(--red)] uppercase">
-                    Ganaste
+                    {won.value === "NEXT_TIME" ? "Casi" : "Ganaste"}
                   </p>
                   <p className="red-gradient font-serif text-2xl font-black">
                     {won.label}
                   </p>
-                  <div className="mt-3 flex items-center justify-center gap-2">
-                    <code className="rounded-md bg-[var(--charcoal)] px-3 py-1.5 font-mono text-sm text-[white]">
-                      {won.value}
-                    </code>
-                    <button
-                      onClick={copy}
-                      className="text-[white] hover:text-white"
-                      aria-label="Copiar código"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="mt-3 text-[10px] tracking-wider text-white/60 uppercase">
-                    Muestra este c\u00f3digo al mesero al pagar
-                  </p>
+                  {won.value !== "NEXT_TIME" && (
+                    <>
+                      <div className="mt-3 flex items-center justify-center gap-2">
+                        <code className="rounded-md bg-[var(--charcoal)] px-3 py-1.5 font-mono text-sm text-[white]">
+                          {won.value}
+                        </code>
+                        <button
+                          onClick={copy}
+                          className="text-[white] hover:text-white"
+                          aria-label="Copiar código"
+                        >
+                          {copied ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-3 text-[10px] tracking-wider text-white/60 uppercase">
+                        Muestra este código al mesero al pagar
+                      </p>
+                    </>
+                  )}
+                  {won.value === "NEXT_TIME" && (
+                    <p className="mt-3 text-[10px] tracking-wider text-white/60 uppercase">
+                      Vuelve en 30 días para otra tirada
+                    </p>
+                  )}
                 </motion.div>
               )}
             </motion.div>
