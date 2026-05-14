@@ -63,6 +63,9 @@ export default function LoyaltyModal() {
     email: "",
     cedula: "",
     acepto_terminos: false,
+    bday_dia: "",
+    bday_mes: "",
+    whatsapp_optin: false,
   });
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -173,14 +176,29 @@ export default function LoyaltyModal() {
       setError("La cédula debe tener 10 dígitos.");
       return;
     }
+    if (!regForm.bday_dia || !regForm.bday_mes) {
+      setError("Selecciona tu fecha de nacimiento (día y mes).");
+      return;
+    }
+    const fecha_nacimiento = `${regForm.bday_dia}/${regForm.bday_mes}`;
     setLoading(true);
     try {
-      const res = await apiRegister(regForm);
+      const res = await apiRegister({
+        nombre: regForm.nombre,
+        telefono: regForm.telefono,
+        email: regForm.email,
+        cedula: regForm.cedula,
+        acepto_terminos: regForm.acepto_terminos,
+        fecha_nacimiento,
+        whatsapp_optin: regForm.whatsapp_optin,
+      });
       if (res.ok && res.client) {
         setClient(res.client);
         setView("dashboard");
       } else if (res.error === "cedula") {
         setError("La cédula debe tener 10 dígitos.");
+      } else if (res.error === "birthday") {
+        setError("Fecha de nacimiento inválida.");
       } else {
         setError("Error al registrarte. Revisa los datos.");
       }
@@ -484,6 +502,86 @@ export default function LoyaltyModal() {
                     }
                     className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 focus:border-[var(--red)] focus:outline-none"
                   />
+                  {/* Fecha de nacimiento (día y mes — para regalo en cumple) */}
+                  <div className="space-y-1">
+                    <p className="text-xs text-white/60">
+                      Fecha de nacimiento{" "}
+                      <span className="text-white/40">
+                        (te invitamos un postre o bebida en tu día 🎂)
+                      </span>
+                    </p>
+                    <div className="flex gap-2">
+                      <select
+                        required
+                        value={regForm.bday_dia}
+                        onChange={(e) =>
+                          setRegForm({ ...regForm, bday_dia: e.target.value })
+                        }
+                        className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-white focus:border-[var(--red)] focus:outline-none"
+                      >
+                        <option value="" className="bg-black">
+                          Día
+                        </option>
+                        {Array.from({ length: 31 }, (_, i) => {
+                          const d = String(i + 1).padStart(2, "0");
+                          return (
+                            <option key={d} value={d} className="bg-black">
+                              {d}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <select
+                        required
+                        value={regForm.bday_mes}
+                        onChange={(e) =>
+                          setRegForm({ ...regForm, bday_mes: e.target.value })
+                        }
+                        className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-white focus:border-[var(--red)] focus:outline-none"
+                      >
+                        <option value="" className="bg-black">
+                          Mes
+                        </option>
+                        {[
+                          ["01", "Enero"],
+                          ["02", "Febrero"],
+                          ["03", "Marzo"],
+                          ["04", "Abril"],
+                          ["05", "Mayo"],
+                          ["06", "Junio"],
+                          ["07", "Julio"],
+                          ["08", "Agosto"],
+                          ["09", "Septiembre"],
+                          ["10", "Octubre"],
+                          ["11", "Noviembre"],
+                          ["12", "Diciembre"],
+                        ].map(([v, n]) => (
+                          <option key={v} value={v} className="bg-black">
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2 text-xs text-white/70">
+                    <input
+                      type="checkbox"
+                      checked={regForm.whatsapp_optin}
+                      onChange={(e) =>
+                        setRegForm({
+                          ...regForm,
+                          whatsapp_optin: e.target.checked,
+                        })
+                      }
+                      className="mt-0.5 h-4 w-4 accent-[var(--red)]"
+                    />
+                    <span>
+                      Acepto recibir <strong>promociones y eventos por WhatsApp</strong>
+                      <span className="block text-white/40">
+                        (opcional — siempre puedes pedir que te quitemos de la lista)
+                      </span>
+                    </span>
+                  </label>
                   <label className="flex items-start gap-2 text-xs text-white/70">
                     <input
                       type="checkbox"
@@ -662,7 +760,8 @@ export default function LoyaltyModal() {
                     <p className="mb-3">
                       Al registrarte aceptas que{" "}
                       <strong>Corte Piedra</strong> recopile y almacene tu
-                      nombre, teléfono, cédula y correo electrónico.
+                      nombre, teléfono, cédula, correo electrónico y fecha
+                      de nacimiento (día y mes).
                     </p>
                     <p className="mb-3">
                       <strong>Uso:</strong> tus datos se usarán solamente para

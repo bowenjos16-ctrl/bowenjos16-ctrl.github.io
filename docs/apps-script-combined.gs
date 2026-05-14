@@ -44,7 +44,8 @@ var SHEETS = {
   EVENTOS: "Eventos",
   PROMOS: "Promos",
   GALERIA: "Galeria",
-  GIROS: "Giros"
+  GIROS: "Giros",
+  BDAY: "Birthdays_Enviados"
 };
 
 // Premios de la ruleta (mirror del frontend). El backend es la fuente de verdad
@@ -82,8 +83,9 @@ function setup() {
     "id", "nombre", "telefono", "email", "fecha_registro",
     "puntos_actuales", "puntos_totales_historicos", "nivel",
     "acepto_terminos", "fecha_aceptacion", "ultima_acumulacion",
-    "cedula"
+    "cedula", "fecha_nacimiento", "whatsapp_optin"
   ]);
+  migrateClientesAddBirthdayColumns_();
   ensureSheet_(ss, SHEETS.TRX, [
     "id", "cliente_id", "telefono", "fecha_hora",
     "puntos_ganados", "password_usada", "ip_cliente"
@@ -155,6 +157,35 @@ function ensureSheet_(ss, name, headers) {
   return sh;
 }
 
+/**
+ * Migra hoja Clientes existente para anadir cols fecha_nacimiento y whatsapp_optin
+ * (idempotente — no rompe si ya existen).
+ */
+function migrateClientesAddBirthdayColumns_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEETS.CLI);
+  if (!sh) return;
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var hasBday = false, hasOpt = false;
+  for (var i = 0; i < headers.length; i++) {
+    if (String(headers[i]).trim() === "fecha_nacimiento") hasBday = true;
+    if (String(headers[i]).trim() === "whatsapp_optin") hasOpt = true;
+  }
+  if (!hasBday) sh.getRange(1, lastCol + 1).setValue("fecha_nacimiento");
+  if (!hasOpt) sh.getRange(1, lastCol + (hasBday ? 1 : 2)).setValue("whatsapp_optin");
+
+  // Asegurar formato texto en col fecha_nacimiento (DD/MM)
+  var newLastCol = sh.getLastColumn();
+  var newHeaders = sh.getRange(1, 1, 1, newLastCol).getValues()[0];
+  for (var j = 0; j < newHeaders.length; j++) {
+    if (String(newHeaders[j]).trim() === "fecha_nacimiento") {
+      sh.getRange(2, j + 1, Math.max(1, sh.getLastRow() - 1), 1).setNumberFormat("@");
+      break;
+    }
+  }
+}
+
 // =============================================================
 //  TRIGGER DIARIO (password 6am)
 // =============================================================
@@ -201,6 +232,13 @@ function dailyPasswordJob() {
 
   sh.appendRow([today, pw, now, sentTo.join(", ")]);
   sendOwnerEmail_(cfg, pw, sentTo);
+
+  // WhatsApp al grupo del negocio (no rompe si falla)
+  try {
+    sendOwnerWhatsApp_(cfg, pw);
+  } catch (err) {
+    Logger.log("WhatsApp send failed: " + err);
+  }
 }
 
 function testGeneratePassword() {
@@ -263,6 +301,444 @@ function sendOwnerEmail_(cfg, pw, recipients) {
   for (var i = 0; i < recipients.length; i++) {
     MailApp.sendEmail({ to: recipients[i], subject: subject, htmlBody: html });
   }
+}
+
+// =============================================================
+//  WHATSAPP (Evolution API) - notifica al grupo del negocio
+// =============================================================
+//
+// SETUP (UNA VEZ):
+//   1. Project Settings -> Script Properties -> agrega:
+//        WHATSAPP_APIKEY = <tu apikey de Evolution API>
+//   2. (Opcional) en hoja Configuracion edita estas filas si difieren:
+//        whatsapp_api_url      = https://contabilidad-mateai-evolution-api.dtuoap.easypanel.host
+//        whatsapp_instance     = Corte-Piedra-Rewards
+//        whatsapp_group_name   = Corte piedra
+//        whatsapp_group_jid    = (vacio, lo descubre solo)
+//   3. Ejecuta seedWhatsAppConfig_() UNA vez para crear las filas.
+//   4. Ejecuta testWhatsApp() para probar que llega al grupo.
+//
+// =============================================================
+
+var WHATSAPP_APIKEY = "429683C4C977415CAAFCCE10F7D57E11";
+
+var WHATSAPP_DEFAULTS = {
+  whatsapp_api_url: "https://contabilidad-mateai-evolution-api.dtuoap.easypanel.host",
+  whatsapp_instance: "Corte-Piedra-Rewards",
+  whatsapp_group_name: "Corte piedra",
+  whatsapp_group_jid: ""
+};
+
+function seedWhatsAppConfig_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var cfg = ss.getSheetByName(SHEETS.CFG);
+  if (!cfg) throw new Error("Hoja Configuracion no existe. Ejecuta setup() primero.");
+  var data = cfg.getDataRange().getValues();
+  var existing = {};
+  for (var i = 1; i < data.length; i++) existing[String(data[i][0])] = i + 1;
+  var keys = Object.keys(WHATSAPP_DEFAULTS);
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    if (!existing[key]) {
+      cfg.appendRow([key, WHATSAPP_DEFAULTS[key], "WhatsApp Evolution API"]);
+    }
+  }
+  SpreadsheetApp.getUi().alert("Filas WhatsApp agregadas a Configuracion. Ahora pon WHATSAPP_APIKEY en Script Properties.");
+}
+
+function getWhatsAppApiKey_() {
+  if (!WHATSAPP_APIKEY) throw new Error("Falta WHATSAPP_APIKEY en el codigo.");
+  return WHATSAPP_APIKEY;
+}
+
+function whatsappBaseUrl_(cfg) {
+  var url = String(cfg.whatsapp_api_url || WHATSAPP_DEFAULTS.whatsapp_api_url).replace(/\/+$/, "");
+  var instance = String(cfg.whatsapp_instance || WHATSAPP_DEFAULTS.whatsapp_instance);
+  return { base: url, instance: instance };
+}
+
+function whatsappFetchGroupJid_(cfg) {
+  // Cache 24h para no llamar la API cada vez
+  var props = PropertiesService.getScriptProperties();
+  var cached = props.getProperty("WHATSAPP_GROUP_JID");
+  var cachedAt = Number(props.getProperty("WHATSAPP_GROUP_JID_AT") || 0);
+  if (cached && (Date.now() - cachedAt) < 24 * 3600 * 1000) return cached;
+
+  // 1) Si esta en Configuracion, usalo
+  var manual = String(cfg.whatsapp_group_jid || "").trim();
+  if (manual) {
+    props.setProperty("WHATSAPP_GROUP_JID", manual);
+    props.setProperty("WHATSAPP_GROUP_JID_AT", String(Date.now()));
+    return manual;
+  }
+
+  // 2) Si no, listar grupos y buscar por nombre
+  var info = whatsappBaseUrl_(cfg);
+  var url = info.base + "/group/fetchAllGroups/" + encodeURIComponent(info.instance) + "?getParticipants=false";
+  var resp = UrlFetchApp.fetch(url, {
+    method: "get",
+    headers: { apikey: getWhatsAppApiKey_() },
+    muteHttpExceptions: true
+  });
+  var code = resp.getResponseCode();
+  var body = resp.getContentText();
+  if (code < 200 || code >= 300) throw new Error("fetchAllGroups " + code + ": " + body);
+  var arr = JSON.parse(body);
+  var name = String(cfg.whatsapp_group_name || WHATSAPP_DEFAULTS.whatsapp_group_name).toLowerCase().trim();
+  var match = null;
+  for (var i = 0; i < arr.length; i++) {
+    var g = arr[i];
+    var subject = String(g.subject || g.name || "").toLowerCase().trim();
+    if (subject === name) { match = g; break; }
+  }
+  if (!match) {
+    var found = arr.map(function (g) { return g.subject || g.name; }).join(", ");
+    throw new Error('Grupo "' + cfg.whatsapp_group_name + '" no encontrado. Disponibles: ' + found);
+  }
+  var jid = match.id || match.jid || match.remoteJid;
+  if (!jid) throw new Error("Grupo sin JID: " + JSON.stringify(match));
+  props.setProperty("WHATSAPP_GROUP_JID", jid);
+  props.setProperty("WHATSAPP_GROUP_JID_AT", String(Date.now()));
+  return jid;
+}
+
+function whatsappSendText_(cfg, jid, text) {
+  var info = whatsappBaseUrl_(cfg);
+  var url = info.base + "/message/sendText/" + encodeURIComponent(info.instance);
+  var resp = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    headers: { apikey: getWhatsAppApiKey_() },
+    payload: JSON.stringify({ number: jid, text: text }),
+    muteHttpExceptions: true
+  });
+  var code = resp.getResponseCode();
+  var body = resp.getContentText();
+  if (code < 200 || code >= 300) throw new Error("sendText " + code + ": " + body);
+  return JSON.parse(body);
+}
+
+function buildWhatsAppPasswordMessage_(cfg, pw) {
+  var name = cfg.restaurante_nombre || "Corte Piedra";
+  var fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
+  return [
+    "🔐 *Contraseña del día — " + name + "*",
+    "📅 " + fecha,
+    "",
+    "La contraseña de HOY es:",
+    "",
+    "*" + pw + "*",
+    "",
+    "━━━━━━━━━━━━━━━━━",
+    "📋 *CÓMO USARLA CON UN CLIENTE*",
+    "━━━━━━━━━━━━━━━━━",
+    "",
+    "1️⃣  El cliente entra a la web de " + name + " y abre *Rewards*.",
+    "",
+    "2️⃣  El cliente inicia sesión con su teléfono (o se registra si es la primera vez).",
+    "",
+    "3️⃣  Cuando termine de comer y quiera acumular puntos, el cliente presiona *\"Acumular puntos de la visita\"* desde su celular.",
+    "",
+    "4️⃣  La cajera o mesera teclea estos *6 dígitos* en el celular del cliente.",
+    "",
+    "5️⃣  ¡Listo! Los puntos se acreditan automáticamente. ✅",
+    "",
+    "━━━━━━━━━━━━━━━━━",
+    "⚠️ *REGLAS*",
+    "━━━━━━━━━━━━━━━━━",
+    "",
+    "• Cada cliente solo puede acumular *1 vez cada 24 horas*.",
+    "• La contraseña *expira a las 23:59* de hoy.",
+    "• 🔒 No la compartas en redes sociales ni con clientes.",
+    "• 📊 Mañana a las 6:00 AM llega una nueva automáticamente."
+  ].join("\n");
+}
+
+function sendOwnerWhatsApp_(cfg, pw) {
+  var jid = whatsappFetchGroupJid_(cfg);
+  var text = buildWhatsAppPasswordMessage_(cfg, pw);
+  return whatsappSendText_(cfg, jid, text);
+}
+
+function testWhatsApp() {
+  var cfg = readConfig_();
+  var pw = "123456";
+  var res = sendOwnerWhatsApp_(cfg, pw);
+  Logger.log(JSON.stringify(res));
+  SpreadsheetApp.getUi().alert("WhatsApp enviado. Revisa el grupo.");
+}
+
+// Anuncio único: confirma al grupo que el sistema quedó conectado
+function sendWhatsAppAnnouncement() {
+  var cfg = readConfig_();
+  var name = cfg.restaurante_nombre || "Corte Piedra";
+  var jid = whatsappFetchGroupJid_(cfg);
+  var text = [
+    "✅ *Sistema de contraseñas conectado — " + name + "*",
+    "",
+    "Acabamos de conectar este grupo al sistema de fidelización.",
+    "",
+    "📩 *A partir de mañana, cada día a las 6:00 AM van a llegar automáticamente aquí:*",
+    "",
+    "• La contraseña del día (6 dígitos)",
+    "• Las instrucciones para usarla con cada cliente",
+    "• Las reglas de uso",
+    "",
+    "━━━━━━━━━━━━━━━━━",
+    "",
+    "Cualquier mensajito que vean con el formato:",
+    "_🔐 Contraseña del día — " + name + "_",
+    "es oficial del sistema. ✅",
+    "",
+    "🔒 No compartan la contraseña fuera del equipo.",
+    "",
+    "¡Listos para arrancar! 🚀"
+  ].join("\n");
+  whatsappSendText_(cfg, jid, text);
+  SpreadsheetApp.getUi().alert("Anuncio enviado al grupo.");
+}
+
+// =============================================================
+//  WHATSAPP DM (mensajes a clientes individuales)
+// =============================================================
+
+/**
+ * Manda un mensaje a un cliente por su numero (formato 593XXXXXXXXX).
+ * Evolution API acepta el numero plano sin "@s.whatsapp.net".
+ */
+function whatsappSendDM_(cfg, telefono, text) {
+  var num = normalizePhone_(telefono);
+  if (!num) throw new Error("Telefono invalido");
+  return whatsappSendText_(cfg, num, text);
+}
+
+/**
+ * Envia bulk de WhatsApp con rate-limit (4s entre mensajes).
+ * recipients: array de { telefono, nombre, ... }
+ * buildText: function(recipient) -> string
+ * Devuelve { sent, skipped, failed, errors[] }
+ */
+function whatsappBulkSend_(cfg, recipients, buildText) {
+  var stats = { sent: 0, skipped: 0, failed: 0, errors: [] };
+  var startMs = Date.now();
+  var MAX_MS = 5 * 60 * 1000; // abortar a los 5 min para no chocar con timeout 6 min
+  for (var i = 0; i < recipients.length; i++) {
+    if (Date.now() - startMs > MAX_MS) {
+      stats.errors.push("Abortado por timeout. Procesados " + i + "/" + recipients.length);
+      break;
+    }
+    var r = recipients[i];
+    if (!r.whatsapp_optin) { stats.skipped++; continue; }
+    var phone = normalizePhone_(r.telefono);
+    if (!phone) { stats.skipped++; continue; }
+    try {
+      var text = buildText(r);
+      whatsappSendText_(cfg, phone, text);
+      stats.sent++;
+    } catch (e) {
+      stats.failed++;
+      stats.errors.push(phone + ": " + e);
+    }
+    if (i < recipients.length - 1) Utilities.sleep(4000); // 4s entre mensajes
+  }
+  return stats;
+}
+
+// =============================================================
+//  CUMPLEAÑOS — preview 3 días antes + felicitación el día
+// =============================================================
+
+function installBirthdayTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "dailyBirthdayJob") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger("dailyBirthdayJob")
+    .timeBased()
+    .atHour(9)
+    .everyDays(1)
+    .create();
+  SpreadsheetApp.getUi().alert("Trigger de cumpleanos instalado para las 9:00 AM diariamente.");
+}
+
+function dailyBirthdayJob() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var bdaySheet = ensureSheet_(ss, SHEETS.BDAY, ["cliente_id", "fecha_envio", "tipo"]);
+  var cfg = readConfig_();
+
+  var todayDDMM = ddmm_(new Date());
+  var in3DDMM = ddmm_(daysFromNow_(3));
+  var todayISO = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  var sentMap = readBirthdaySentMap_(bdaySheet);
+  var clients = getAllActiveClients_();
+
+  var actualClients = [];
+  var previewClients = [];
+  for (var i = 0; i < clients.length; i++) {
+    var c = clients[i];
+    if (!c.fecha_nacimiento) continue;
+    var key = c.id + "|" + todayISO;
+    if (c.fecha_nacimiento === todayDDMM && !sentMap[key + "|actual"]) {
+      actualClients.push(c);
+    }
+    if (c.fecha_nacimiento === in3DDMM && !sentMap[key + "|preview"]) {
+      previewClients.push(c);
+    }
+  }
+
+  if (actualClients.length === 0 && previewClients.length === 0) {
+    Logger.log("Birthday job: nada que enviar hoy.");
+    return;
+  }
+
+  // PREVIEW (3 dias antes)
+  for (var p = 0; p < previewClients.length; p++) {
+    var pc = previewClients[p];
+    try {
+      sendBirthdayPreviewEmail_(cfg, pc);
+      if (pc.whatsapp_optin) {
+        try { whatsappSendDM_(cfg, pc.telefono, buildBirthdayPreviewWA_(cfg, pc)); }
+        catch (e) { Logger.log("WA preview " + pc.telefono + ": " + e); }
+        Utilities.sleep(4000);
+      }
+      bdaySheet.appendRow([pc.id, todayISO, "preview"]);
+    } catch (err) { Logger.log("Birthday preview err: " + err); }
+  }
+
+  // ACTUAL (el dia del cumple)
+  for (var a = 0; a < actualClients.length; a++) {
+    var ac = actualClients[a];
+    try {
+      sendBirthdayActualEmail_(cfg, ac);
+      if (ac.whatsapp_optin) {
+        try { whatsappSendDM_(cfg, ac.telefono, buildBirthdayActualWA_(cfg, ac)); }
+        catch (e) { Logger.log("WA actual " + ac.telefono + ": " + e); }
+        Utilities.sleep(4000);
+      }
+      bdaySheet.appendRow([ac.id, todayISO, "actual"]);
+    } catch (err) { Logger.log("Birthday actual err: " + err); }
+  }
+}
+
+function ddmm_(date) {
+  var d = date.getDate();
+  var m = date.getMonth() + 1;
+  return (d < 10 ? "0" + d : d) + "/" + (m < 10 ? "0" + m : m);
+}
+
+function daysFromNow_(n) {
+  var d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function readBirthdaySentMap_(sh) {
+  var rows = sh.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    var id = rows[i][0];
+    var fecha = rows[i][1];
+    var tipo = rows[i][2];
+    var fechaStr = fecha instanceof Date
+      ? Utilities.formatDate(fecha, Session.getScriptTimeZone(), "yyyy-MM-dd")
+      : String(fecha);
+    map[id + "|" + fechaStr + "|" + tipo] = true;
+  }
+  return map;
+}
+
+function buildBirthdayPreviewWA_(cfg, c) {
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var primerNombre = String(c.nombre || "").split(" ")[0] || "amigo";
+  return [
+    "🎂 *Tu cumpleaños se acerca, " + primerNombre + "!*",
+    "",
+    "Te recordamos que en *" + nombre + "* tenemos un regalo esperándote:",
+    "",
+    "🍰 *Postre o bebida gratis* con cualquier consumo el día de tu cumpleaños.",
+    "",
+    "Reserva tu mesa para celebrar:",
+    "📞 " + (cfg.restaurante_telefono || ""),
+    "",
+    "¡Te esperamos! 🥂"
+  ].join("\n");
+}
+
+function buildBirthdayActualWA_(cfg, c) {
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var primerNombre = String(c.nombre || "").split(" ")[0] || "amigo";
+  return [
+    "🎉 *¡Feliz cumpleaños, " + primerNombre + "!* 🎂",
+    "",
+    "Hoy en *" + nombre + "* te invitamos:",
+    "",
+    "🍰 *Postre o bebida gratis* con cualquier consumo.",
+    "",
+    "Solo válido HOY. Muestra este mensaje al mesero.",
+    "",
+    "📞 " + (cfg.restaurante_telefono || ""),
+    "",
+    "¡Te esperamos para celebrar contigo! 🥳"
+  ].join("\n");
+}
+
+function sendBirthdayPreviewEmail_(cfg, c) {
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var primerNombre = String(c.nombre || "").split(" ")[0] || "amigo";
+  var subject = "🎂 Tu cumpleanos se acerca - " + nombre;
+  var html = buildBirthdayEmailHtml_(nombre, primerNombre,
+    "Tu cumpleaños se acerca",
+    "Te recordamos que tienes un regalo esperándote en " + nombre + ": <strong>postre o bebida gratis</strong> con cualquier consumo el día de tu cumpleaños.",
+    "Reserva tu mesa: " + (cfg.restaurante_telefono || ""),
+    "#c9a35a");
+  if (c.email) MailApp.sendEmail({ to: c.email, subject: subject, htmlBody: html, name: nombre });
+}
+
+function sendBirthdayActualEmail_(cfg, c) {
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var primerNombre = String(c.nombre || "").split(" ")[0] || "amigo";
+  var subject = "🎉 ¡Feliz cumpleanos! - " + nombre;
+  var html = buildBirthdayEmailHtml_(nombre, primerNombre,
+    "¡Feliz cumpleaños!",
+    "Hoy te invitamos un <strong>postre o bebida gratis</strong> con cualquier consumo. Solo válido HOY. Muestra este correo al mesero.",
+    "Te esperamos: " + (cfg.restaurante_telefono || ""),
+    "#c8202e");
+  if (c.email) MailApp.sendEmail({ to: c.email, subject: subject, htmlBody: html, name: nombre });
+}
+
+function buildBirthdayEmailHtml_(restaurante, nombreCliente, titulo, mensaje, footer, accent) {
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +
+    '<body style="margin:0;padding:0;background:#0a0a0a;font-family:Georgia,serif;">' +
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0a0a0a;padding:40px 20px;">' +
+    '<tr><td align="center">' +
+    '<table role="presentation" width="520" cellspacing="0" cellpadding="0" style="max-width:520px;background:#000;border:1px solid ' + accent + '40;border-radius:20px;overflow:hidden;">' +
+    '<tr><td style="padding:40px 30px 20px;text-align:center;">' +
+    '<p style="color:' + accent + ';font-size:11px;letter-spacing:0.4em;text-transform:uppercase;margin:0 0 6px;font-family:Arial,sans-serif;">' + titulo + '</p>' +
+    '<h1 style="color:#fff;font-size:28px;margin:0;font-weight:900;">' + restaurante + '</h1>' +
+    '</td></tr>' +
+    '<tr><td style="padding:10px 30px 20px;text-align:center;">' +
+    '<p style="color:#fff;font-size:18px;margin:0 0 16px;font-family:Arial,sans-serif;">¡Hola ' + nombreCliente + '! 🎂</p>' +
+    '<p style="color:rgba(255,255,255,0.85);font-size:15px;line-height:1.6;margin:0;font-family:Arial,sans-serif;">' + mensaje + '</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:20px 30px 40px;text-align:center;">' +
+    '<p style="color:rgba(255,255,255,0.5);font-size:13px;margin:0;font-family:Arial,sans-serif;">' + footer + '</p>' +
+    '</td></tr></table></td></tr></table></body></html>';
+}
+
+function testBirthdayJob() {
+  dailyBirthdayJob();
+  SpreadsheetApp.getUi().alert("Birthday job ejecutado. Revisa Logger y la hoja " + SHEETS.BDAY + ".");
+}
+
+// Util: limpia el cache del JID si cambias el nombre del grupo
+function resetWhatsAppGroupCache() {
+  var props = PropertiesService.getScriptProperties();
+  props.deleteProperty("WHATSAPP_GROUP_JID");
+  props.deleteProperty("WHATSAPP_GROUP_JID_AT");
+  SpreadsheetApp.getUi().alert("Cache del grupo limpio.");
 }
 
 // =============================================================
@@ -504,9 +980,13 @@ function escapeHtml_(s) {
 function register_(data) {
   var phone = normalizePhone_(data.telefono);
   var cedula = String(data.cedula || "").replace(/\D/g, "");
+  var fechaNac = normalizeBirthday_(data.fecha_nacimiento);
+  var waOptin = data.whatsapp_optin === true || data.whatsapp_optin === "true";
+
   if (!data.nombre || !phone || !data.email) return { ok: false, error: "missing" };
   if (!cedula || cedula.length !== 10) return { ok: false, error: "cedula" };
   if (!data.acepto_terminos) return { ok: false, error: "terms" };
+  if (!fechaNac) return { ok: false, error: "birthday" };
 
   var existing = findClientByPhone_(phone);
   if (existing) return { ok: true, client: existing, existed: true };
@@ -519,13 +999,31 @@ function register_(data) {
     id, String(data.nombre).trim(), phone, String(data.email).trim(), now,
     0, 0, "Bronce",
     true, now, "",
-    ""
+    "", "", waOptin
   ]);
-  // Forzar formato texto en la celda de cedula para preservar ceros iniciales
-  // (Google Sheets convierte "0123456789" a numero y elimina el 0).
+  // Cedula en texto para preservar ceros iniciales
   var lastRow = sh.getLastRow();
   sh.getRange(lastRow, 12).setNumberFormat("@").setValue(cedula);
+  // Fecha nacimiento en texto (DD/MM)
+  sh.getRange(lastRow, 13).setNumberFormat("@").setValue(fechaNac);
   return { ok: true, client: findClientByPhone_(phone) };
+}
+
+/**
+ * Acepta DD/MM, DD-MM, D/M, etc. Devuelve "DD/MM" 0-padded o "" si invalido.
+ */
+function normalizeBirthday_(v) {
+  if (!v) return "";
+  var s = String(v).replace(/[^0-9]/g, "/").replace(/\/+/g, "/").replace(/^\/|\/$/g, "");
+  var parts = s.split("/");
+  if (parts.length < 2) return "";
+  var d = parseInt(parts[0], 10);
+  var m = parseInt(parts[1], 10);
+  if (!d || !m || d < 1 || d > 31 || m < 1 || m > 12) return "";
+  // Validar dias por mes (febrero permitimos 29 para nacidos bisiestos)
+  var maxDays = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (d > maxDays[m - 1]) return "";
+  return (d < 10 ? "0" + d : d) + "/" + (m < 10 ? "0" + m : m);
 }
 
 /**
@@ -695,7 +1193,9 @@ function clientRowToObj_(r) {
     acepto_terminos: !!r[8],
     fecha_aceptacion: r[9],
     ultima_acumulacion: r[10],
-    cedula: normalizeCedula_(r[11])
+    cedula: normalizeCedula_(r[11]),
+    fecha_nacimiento: String(r[12] || "").trim(),
+    whatsapp_optin: !!r[13]
   };
 }
 
@@ -2584,7 +3084,8 @@ function verificarNuevosEventos_() {
     }
     var notifVal = row[notifColIdx];
     if (!truthy_(evento.active)) continue;
-    if (truthy_(notifVal)) continue; // ya notificado
+    // notificado: celda vacía = NO notificado. Solo "true"/"TRUE"/true cuenta como notificado.
+    if (notifVal === true || String(notifVal).toLowerCase().trim() === "true") continue;
 
     try {
       enviarEmailAnuncioEvento_(evento, clients);
@@ -2636,7 +3137,14 @@ function getAllActiveClients_() {
   for (var i = 1; i < rows.length; i++) {
     var email = String(rows[i][3] || "").trim();
     if (email && email.indexOf("@") > 0) {
-      result.push({ nombre: String(rows[i][1] || "Cliente"), email: email });
+      result.push({
+        id: rows[i][0],
+        nombre: String(rows[i][1] || "Cliente"),
+        telefono: rows[i][2],
+        email: email,
+        fecha_nacimiento: String(rows[i][12] || "").trim(),
+        whatsapp_optin: !!rows[i][13]
+      });
     }
   }
   return result;
@@ -2661,6 +3169,36 @@ function enviarEmailAnuncioEvento_(evento, clients) {
       Logger.log("Error email anuncio a " + clients[i].email + ": " + e);
     }
   }
+  // WhatsApp paralelo (no rompe si falla)
+  try {
+    enviarWhatsAppAnuncioEvento_(cfg, evento, clients);
+  } catch (err) {
+    Logger.log("Error WhatsApp anuncio evento: " + err);
+  }
+}
+
+function enviarWhatsAppAnuncioEvento_(cfg, evento, clients) {
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var titulo = String(evento.titulo || "Nuevo Evento");
+  var subtitulo = String(evento.subtitulo || "");
+  var fecha = formatFechaEventoTexto_(evento);
+  var hora = formatHoraEvento_(evento);
+  var stats = whatsappBulkSend_(cfg, clients, function (r) {
+    return [
+      "🎉 *Nuevo evento en " + nombre + "*",
+      "",
+      "*" + titulo + "*",
+      subtitulo ? "_" + subtitulo + "_" : "",
+      "",
+      fecha ? "📅 " + fecha : "",
+      hora ? "🕐 " + hora : "",
+      "",
+      "¡Te esperamos, " + (r.nombre || "amigo") + "! 🍷",
+      "",
+      "Reserva: " + (cfg.restaurante_telefono || "")
+    ].filter(function (l) { return l !== ""; }).join("\n");
+  });
+  Logger.log("WA anuncio evento: " + JSON.stringify(stats));
 }
 
 /**
@@ -2682,6 +3220,29 @@ function enviarEmailRecordatorio_(evento, clients) {
       Logger.log("Error email recordatorio a " + clients[i].email + ": " + e);
     }
   }
+  try {
+    enviarWhatsAppRecordatorio_(cfg, evento, clients);
+  } catch (err) {
+    Logger.log("Error WhatsApp recordatorio: " + err);
+  }
+}
+
+function enviarWhatsAppRecordatorio_(cfg, evento, clients) {
+  var nombre = cfg.restaurante_nombre || "Corte Piedra";
+  var titulo = String(evento.titulo || "Evento");
+  var hora = formatHoraEvento_(evento);
+  var stats = whatsappBulkSend_(cfg, clients, function (r) {
+    return [
+      "⏰ *Mañana en " + nombre + "*",
+      "",
+      "*" + titulo + "*",
+      "",
+      hora ? "🕐 " + hora : "",
+      "",
+      "¡Te esperamos, " + (r.nombre || "amigo") + "! 🎶"
+    ].filter(function (l) { return l !== ""; }).join("\n");
+  });
+  Logger.log("WA recordatorio: " + JSON.stringify(stats));
 }
 
 /**
@@ -2787,6 +3348,17 @@ function testEmailEvento() {
 //    - Cron diario 9 AM con recordatorios "manana es el evento"
 // 8. Opcional: ejecuta testGeneratePassword() para probar el email de contrasena
 // 9. Opcional: ejecuta testEmailEvento() para probar el email de eventos
+// 9a. WHATSAPP al grupo del negocio (corre junto al correo cada 6 AM):
+//    - Project Settings -> Script Properties -> WHATSAPP_APIKEY = <tu apikey Evolution>
+//      (o pega WHATSAPP_APIKEY directamente en el codigo)
+//    - Ejecuta seedWhatsAppConfig_() (agrega filas whatsapp_* a Configuracion)
+//    - Ejecuta testWhatsApp() para probar que llega al grupo "Corte piedra"
+// 9b. CUMPLEAÑOS - mensajes 3 dias antes + el dia del cumple:
+//    - Despues de pegar la nueva version del codigo, ejecuta setup() de nuevo
+//      (es idempotente; agrega cols fecha_nacimiento, whatsapp_optin a Clientes
+//       y crea hoja Birthdays_Enviados)
+//    - Ejecuta installBirthdayTrigger() -> cron diario 9 AM
+//    - Opcional: testBirthdayJob() para correrlo manualmente
 // 10. Implementar -> Nueva implementacion -> Web app:
 //    - Ejecutar como: Yo
 //    - Quien tiene acceso: Cualquier usuario

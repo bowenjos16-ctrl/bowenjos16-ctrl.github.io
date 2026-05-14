@@ -155,6 +155,8 @@ export async function apiRegister(input: {
   email: string;
   cedula: string;
   acepto_terminos: boolean;
+  fecha_nacimiento: string; // formato DD/MM
+  whatsapp_optin: boolean;
 }) {
   return apiPost<{ ok: boolean; client?: LoyaltyClient; error?: string }>({
     action: "register",
